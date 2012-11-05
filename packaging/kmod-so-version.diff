@@ -1,0 +1,24 @@
+Index: kmod-9/Makefile.am
+===================================================================
+--- kmod-9.orig/Makefile.am
++++ kmod-9/Makefile.am
+@@ -33,10 +33,6 @@ SED_PROCESS = \
+ %.pc: %.pc.in Makefile
+ 	$(SED_PROCESS)
+ 
+-LIBKMOD_CURRENT=3
+-LIBKMOD_REVISION=3
+-LIBKMOD_AGE=1
+-
+ noinst_LTLIBRARIES = libkmod/libkmod-util.la
+ libkmod_libkmod_util_la_SOURCES = libkmod/libkmod-hash.c \
+ 				  libkmod/libkmod-hash.h \
+@@ -65,7 +61,7 @@ EXTRA_DIST += libkmod/libkmod.sym
+ EXTRA_DIST += libkmod/COPYING libkmod/README
+ 
+ libkmod_libkmod_la_LDFLAGS = $(AM_LDFLAGS) \
+-	-version-info $(LIBKMOD_CURRENT):$(LIBKMOD_REVISION):$(LIBKMOD_AGE) \
++	-version-number 2:1 \
+ 	-Wl,--version-script=$(top_srcdir)/libkmod/libkmod.sym
+ libkmod_libkmod_la_DEPENDENCIES = libkmod/libkmod-util.la \
+ 				  ${top_srcdir}/libkmod/libkmod.sym
