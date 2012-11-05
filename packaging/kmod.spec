@@ -11,8 +11,6 @@ Group:          System/Kernel
 #Git-Clone:	git://git.kernel.org/pub/scm/utils/kernel/kmod/kmod
 Source:         %{name}-%{version}.tar.xz
 Source2:        %{name}-%{version}.tar.sign
-Patch1:         kmod-so-version.diff
-Patch2:         fix-32bits.diff
 
 BuildRequires:  autoconf
 BuildRequires:  automake
@@ -21,7 +19,6 @@ BuildRequires:  pkgconfig >= 0.21
 BuildRequires:  xz
 BuildRequires:  pkgconfig(liblzma) >= 4.99
 BuildRequires:  pkgconfig(zlib)
-BuildRoot:      %{_tmppath}/%{name}-%{version}-build
 
 %description
 kmod is a set of tools to handle common tasks with Linux kernel
@@ -70,8 +67,6 @@ in %lname.
 
 %prep
 %setup -q
-%patch1 -p1
-%patch2 -p1
 
 %build
 autoreconf -fi
@@ -90,7 +85,6 @@ make check
 
 %install
 %make_install
-rm -f %{buildroot}/%{_libdir}/*.la
 
 # kmod-compat
 mkdir -p %{buildroot}/%{_sbindir}
@@ -104,10 +98,11 @@ done;
 
 %postun -n %lname -p /sbin/ldconfig
 
+%docs_package
+
 %files
 %defattr(-,root,root)
 %{_bindir}/kmod
-%{_mandir}/man5/modules.dep.bin.5*
 
 %files -n %lname
 %defattr(-,root,root)
@@ -128,14 +123,5 @@ done;
 %{_sbindir}/modinfo
 %{_sbindir}/modprobe
 %{_sbindir}/rmmod
-%{_mandir}/man5/depmod.d.5*
-%{_mandir}/man5/modprobe.d.5*
-%{_mandir}/man5/modules.dep.5*
-%{_mandir}/man8/depmod.8*
-%{_mandir}/man8/insmod.8*
-%{_mandir}/man8/lsmod.8*
-%{_mandir}/man8/modinfo.8*
-%{_mandir}/man8/modprobe.8*
-%{_mandir}/man8/rmmod.8*
 
 %changelog
