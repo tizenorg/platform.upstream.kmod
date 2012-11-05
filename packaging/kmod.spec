@@ -10,7 +10,6 @@ Group:          System/Kernel
 #Git-Web:	http://git.kernel.org/?p=utils/kernel/kmod/kmod.git;a=summary
 #Git-Clone:	git://git.kernel.org/pub/scm/utils/kernel/kmod/kmod
 Source:         %{name}-%{version}.tar.xz
-Source2:        %{name}-%{version}.tar.sign
 
 BuildRequires:  autoconf
 BuildRequires:  automake
