@@ -1,5 +1,5 @@
 Name:           kmod
-Version:        9
+Version:        12
 Release:        0
 License:        LGPL-2.1+ and GPL-2.0+
 %define lname	libkmod
@@ -7,10 +7,7 @@ Summary:        Utilities to load modules into the kernel
 Url:            http://www.politreco.com/2011/12/announce-kmod-2/
 Group:          System/Kernel
 
-#Git-Web:	http://git.kernel.org/?p=utils/kernel/kmod/kmod.git;a=summary
-#Git-Clone:	git://git.kernel.org/pub/scm/utils/kernel/kmod/kmod
 Source:         %{name}-%{version}.tar.xz
-
 BuildRequires:  autoconf
 BuildRequires:  automake
 BuildRequires:  libtool
@@ -32,8 +29,8 @@ indexes from module-init-tools project.
 License:        GPL-2.0+
 Summary:        Compat symlinks for kernel module utilities
 Group:          System/Kernel
-Conflicts:      module-init-tools
 Requires(pre):	filesystem
+Provides:       module-init-tools
 
 %description compat
 kmod is a set of tools to handle common tasks with Linux kernel
