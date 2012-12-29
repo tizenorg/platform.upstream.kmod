@@ -70,6 +70,7 @@ autoreconf -fi
 # packages which fail to properly use pkgconfig.
 %configure \
    --with-xz \
+   --disable-manpages \
    --with-zlib \
    --includedir=%{_includedir}/%{name}-%{version} \
    --with-rootlibdir=%{_libdir} \
