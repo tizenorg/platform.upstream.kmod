@@ -1,6 +1,4 @@
-#ifndef _LIBKMOD_UTIL_H_
-#define _LIBKMOD_UTIL_H_
-
+#pragma once
 #include "macro.h"
 
 #include <limits.h>
@@ -24,6 +22,14 @@ char *path_make_absolute_cwd(const char *p) _must_check_ __attribute__((nonnull(
 int alias_normalize(const char *alias, char buf[PATH_MAX], size_t *len) _must_check_ __attribute__((nonnull(1,2)));
 char *modname_normalize(const char *modname, char buf[PATH_MAX], size_t *len) __attribute__((nonnull(1, 2)));
 char *path_to_modname(const char *path, char buf[PATH_MAX], size_t *len) __attribute__((nonnull(2)));
+
+extern const struct kmod_ext {
+	const char *ext;
+	size_t len;
+} kmod_exts[];
+#define KMOD_EXT_UNC 0
+bool path_ends_with_kmod_ext(const char *path, size_t len) __attribute__((nonnull(1)));
+
 unsigned long long stat_mstamp(const struct stat *st);
 unsigned long long ts_usec(const struct timespec *ts);
 
@@ -42,5 +48,3 @@ do {						\
 	} *__p = (typeof(__p)) (ptr);		\
 	__p->__v = (val);			\
 } while(0)
-
-#endif

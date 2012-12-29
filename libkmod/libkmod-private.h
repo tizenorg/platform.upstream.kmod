@@ -1,5 +1,4 @@
-#ifndef _LIBKMOD_PRIVATE_H_
-#define _LIBKMOD_PRIVATE_H_
+#pragma once
 
 #include <stdbool.h>
 #include <stdio.h>
@@ -140,6 +139,7 @@ void kmod_module_set_builtin(struct kmod_module *mod, bool builtin) __attribute_
 
 /* libkmod-file.c */
 struct kmod_file *kmod_file_open(const struct kmod_ctx *ctx, const char *filename) _must_check_ __attribute__((nonnull(1,2)));
+struct kmod_elf *kmod_file_get_elf(struct kmod_file *file) __attribute__((nonnull(1)));
 void *kmod_file_get_contents(const struct kmod_file *file) _must_check_ __attribute__((nonnull(1)));
 off_t kmod_file_get_size(const struct kmod_file *file) _must_check_ __attribute__((nonnull(1)));
 void kmod_file_unref(struct kmod_file *file) __attribute__((nonnull(1)));
@@ -170,5 +170,3 @@ int kmod_elf_get_section(const struct kmod_elf *elf, const char *section, const 
 
 /* util functions */
 #include "libkmod-util.h"
-
-#endif

@@ -157,10 +157,9 @@ static int handle_kmod_compat_commands(int argc, char *argv[])
 
 int main(int argc, char *argv[])
 {
-	const char *binname = basename(argv[0]);
 	int err;
 
-	if (strcmp(binname, "kmod") == 0)
+	if (strcmp(program_invocation_short_name, "kmod") == 0)
 		err = handle_kmod_commands(argc, argv);
 	else
 		err = handle_kmod_compat_commands(argc, argv);

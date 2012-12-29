@@ -1,25 +1,82 @@
+kmod 12
+=======
+
+- Bug fixes:
+	- Fix removing vermagic from module when told to force load a module
+	- Fix removing __versions section when told to force load a module: we
+	  need to mangle the section header, not the section.
+	- modinfo no longer fails while loading a module from file when path
+	  contains ".ko" substring
+
+kmod 11
+=======
+
+- Improvements to testsuite:
+	- Fix testsuite defining symbols twice on 32 bit systems
+	- Allow to check generated files against correct ones
+
+- New features:
+	- libkmod now keeps a file opened after the first call to
+	  kmod_module_get_{info,versions,symbols,dependency_symbols}. This
+	  reduces signficantly the amount of time depmod tool takes to
+	  execute. Particularly if compressed modules are used.
+	- Remove --with-rootprefix from build system. It was not a great idea
+	  after all and should not be use since it causes more harm then
+	  benefits.
+	- Hide --wait option on rmmod. This feature is being targeted for
+	  removal from kernel. rmmod still accepts this option, but it's hidden
+	  now: man page and usage() says nothing about it and if it's used,
+	  user will get a 10s sleep. This way we can check and help if anyone
+	  is using this feature.
+	- Refactor message logging on all tools, giving proper prefix, routing
+	  everything to syslog when asked for, etc.
+
+- Bug fixes:
+	- Fix parsing of modules.order when using compressed modules
+	- Usage messages go to stdout instead of stderr
+	- Fix memory leak in hash implementation
+
+kmod 10
+=======
+
+- New features:
+	- Read coresize from /sys if supported
+
+	- Add flag to kmod_module_probe_insert() to apply blacklisting during
+	  probe only if mod is an alias. Now modprobe uses this flag by default.
+	  This is needed to fix a change in behavior regarding module-init-tools
+	  and ultimately makes us loading a blacklisted module.
+
+- Better formatting in man pages
+
+- Add option to disable building man pages at build time
+
+- Fixes in the testsuite and refactoring of LDPRELOAD'ed libraries
+
+- Re-licensing testsuite as LGPL
+
 kmod 9
 ======
 
-- Improvements to testsuite:
+- Improvements to the testsuite:
 	- Check for correct handling of softdep loops
 	- Check for correct handling of install command loops
 
 - Bug fixes:
 	- Fix build with compilers that don't support --gc-sections
-	- Handle errors when dealing with gzipp'ed modules
-	- depmod now handles errors while writing indexes, so it doesn't end up
-	  with corrupted index without telling the user
+	- Handle errors when dealing with gzipped modules
+	- depmod now handles errors while writing indices, so it doesn't end up
+	  with a corrupted index without telling the user
 
 kmod 8
 ======
 
 - No new features, small bug fixes only.
-	- Fix bug in "modprobe -c" output: be compatible with
+	- Fix a bug in "modprobe -c" output: be compatible with
 	  module-init-tools
 
-	- Give an useful error message when init_module fails due to bad
-	  parameter or unknown symbol
+	- Give a useful error message when init_module fails due to bad
+	  parameter or unknown symbols
 
 	- Fix doc generation
 
@@ -32,8 +89,8 @@ kmod 7
 	2. /run/modprobe.d
 	3. /lib/modprobe.d
 
-- Fix setting CFLAGS/LDFLAGS in build system. This prevents us from not
-  allowing user to set his preference
+- Fix setting CFLAGS/LDFLAGS in build system. This prevented us from not
+  allowing the user to set his preferences.
 
 - Bug fixes:
 	- Return same error codes of module-init-tools when removing modules
@@ -42,7 +99,6 @@ kmod 7
 	  same of the running kernel
 	- 'modprobe -r' always look at all command line arguments
 	- Fix '-q' usage in modprobe
-	-
 
 kmod 6
 ======

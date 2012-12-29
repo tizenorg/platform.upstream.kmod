@@ -1,6 +1,6 @@
 AC_PREREQ(2.60)
 AC_INIT([kmod],
-	[9],
+	[12],
 	[linux-modules@vger.kernel.org],
 	[kmod],
 	[http://git.kernel.org/?p=utils/kernel/kmod/kmod.git])
@@ -31,7 +31,6 @@ AC_C_BIGENDIAN
 
 AC_PROG_SED
 AC_PROG_MKDIR_P
-AC_PATH_PROG([XSLTPROC], [xsltproc])
 PKG_PROG_PKG_CONFIG
 
 
@@ -48,11 +47,6 @@ AC_CHECK_MEMBERS([struct stat.st_mtim], [], [], [#include <sys/stat.h>])
 #####################################################################
 # --with-
 #####################################################################
-
-AC_ARG_WITH([rootprefix],
-        AS_HELP_STRING([--with-rootprefix=DIR], [rootfs directory prefix for config files and kernel modules]),
-        [], [with_rootprefix=""])
-AC_SUBST([rootprefix], [$with_rootprefix])
 
 AC_ARG_WITH([rootlibdir],
         AS_HELP_STRING([--with-rootlibdir=DIR], [rootfs directory to install shared libraries]),
@@ -88,6 +82,15 @@ AC_ARG_ENABLE([tools],
         AS_HELP_STRING([--disable-tools], [disable building tools that provide same functionality as module-init-tools @<:@default=enabled@:>@]),
 	[], enable_tools=yes)
 AM_CONDITIONAL([BUILD_TOOLS], [test "x$enable_tools" = "xyes"])
+
+AC_ARG_ENABLE([manpages],
+        AS_HELP_STRING([--disable-manpages], [disable manpages @<:@default=enabled@:>@]),
+	[], enable_manpages=yes)
+AM_CONDITIONAL([BUILD_MANPAGES], [test "x$enable_manpages" = "xyes"])
+AC_PATH_PROG([XSLTPROC], [xsltproc], [no])
+AS_IF([test "x$XSLTPROC" = "xno" && test "x$enable_manpages" = "xyes"], [
+	AC_MSG_ERROR([xsltproc command not found, try ./configure --disable-manpages])
+])
 
 AC_ARG_ENABLE([logging],
 	AS_HELP_STRING([--disable-logging], [disable system logging @<:@default=enabled@:>@]),
@@ -185,7 +188,6 @@ AC_MSG_RESULT([
 	======
 
 	prefix:			${prefix}
-	rootprefix:		${rootprefix}
 	sysconfdir:		${sysconfdir}
 	libdir:			${libdir}
 	rootlibdir:		${rootlibdir}
@@ -201,4 +203,5 @@ AC_MSG_RESULT([
 	compression:		xz=${with_xz}  zlib=${with_zlib}
 	debug:			${enable_debug}
 	doc:			${enable_gtk_doc}
+	man:			${enable_manpages}
 ])

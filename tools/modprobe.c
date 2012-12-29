@@ -29,15 +29,17 @@
 #include <sys/utsname.h>
 #include <sys/wait.h>
 #include <unistd.h>
-#include <syslog.h>
 #include <limits.h>
 
 #include "libkmod.h"
 #include "libkmod-array.h"
 #include "macro.h"
 
+#include "kmod.h"
+
 static int log_priority = LOG_CRIT;
 static int use_syslog = 0;
+#define LOG(...) log_printf(log_priority, __VA_ARGS__)
 
 #define DEFAULT_VERBOSE LOG_WARNING
 static int verbose = DEFAULT_VERBOSE;
@@ -89,10 +91,9 @@ static const struct option cmdopts[] = {
 	{NULL, 0, 0, 0}
 };
 
-static void help(const char *progname)
+static void help(void)
 {
-	fprintf(stderr,
-		"Usage:\n"
+	printf("Usage:\n"
 		"\t%s [options] [-i] [-b] modulename\n"
 		"\t%s [options] -a [-i] [-b] modulename [modulename...]\n"
 		"\t%s [options] -r [-i] modulename\n"
@@ -128,7 +129,7 @@ static void help(const char *progname)
 		"\t-n, --show                  Same as --dry-run\n"
 
 		"\t-C, --config=FILE           Use FILE instead of default search paths\n"
-		"\t-d, --dirname=DIR           Use DIR as filesystem root for " ROOTPREFIX "/lib/modules\n"
+		"\t-d, --dirname=DIR           Use DIR as filesystem root for /lib/modules\n"
 		"\t-S, --set-version=VERSION   Use VERSION instead of `uname -r`\n"
 
 		"\t-s, --syslog                print to syslog, not stderr\n"
@@ -136,7 +137,9 @@ static void help(const char *progname)
 		"\t-v, --verbose               enables more messages\n"
 		"\t-V, --version               show version\n"
 		"\t-h, --help                  show this help\n",
-		progname, progname, progname, progname, progname, progname);
+		program_invocation_short_name, program_invocation_short_name,
+		program_invocation_short_name, program_invocation_short_name,
+		program_invocation_short_name, program_invocation_short_name);
 }
 
 static inline void _show(const char *fmt, ...)
@@ -151,61 +154,6 @@ static inline void _show(const char *fmt, ...)
 	fflush(stdout);
 	va_end(args);
 }
-
-static inline void _log(int prio, const char *fmt, ...)
-{
-	const char *prioname;
-	char buf[32], *msg;
-	va_list args;
-
-	if (prio > verbose)
-		return;
-
-	va_start(args, fmt);
-	if (vasprintf(&msg, fmt, args) < 0)
-		msg = NULL;
-	va_end(args);
-	if (msg == NULL)
-		return;
-
-	switch (prio) {
-	case LOG_CRIT:
-		prioname = "FATAL";
-		break;
-	case LOG_ERR:
-		prioname = "ERROR";
-		break;
-	case LOG_WARNING:
-		prioname = "WARNING";
-		break;
-	case LOG_NOTICE:
-		prioname = "NOTICE";
-		break;
-	case LOG_INFO:
-		prioname = "INFO";
-		break;
-	case LOG_DEBUG:
-		prioname = "DEBUG";
-		break;
-	default:
-		snprintf(buf, sizeof(buf), "LOG-%03d", prio);
-		prioname = buf;
-	}
-
-	if (use_syslog)
-		syslog(LOG_NOTICE, "%s: %s", prioname, msg);
-	else
-		fprintf(stderr, "%s: %s", prioname, msg);
-	free(msg);
-
-	if (prio <= LOG_CRIT)
-		exit(EXIT_FAILURE);
-}
-#define ERR(...) _log(LOG_ERR, __VA_ARGS__)
-#define WRN(...) _log(LOG_WARNING, __VA_ARGS__)
-#define INF(...) _log(LOG_INFO, __VA_ARGS__)
-#define DBG(...) _log(LOG_DEBUG, __VA_ARGS__)
-#define LOG(...) _log(log_priority, __VA_ARGS__)
 #define SHOW(...) _show(__VA_ARGS__)
 
 static int show_config(struct kmod_ctx *ctx)
@@ -582,6 +530,7 @@ static int insmod(struct kmod_ctx *ctx, const char *alias,
 	if (do_show || verbose > DEFAULT_VERBOSE)
 		show = &print_action;
 
+	flags |= KMOD_PROBE_APPLY_BLACKLIST_ALIAS_ONLY;
 
 	if (use_blacklist)
 		flags |= KMOD_PROBE_APPLY_BLACKLIST;
@@ -785,47 +734,6 @@ static char **prepend_options_from_env(int *p_argc, char **orig_argv)
 	return new_argv;
 }
 
-static void log_syslog(void *data, int priority, const char *file, int line,
-			const char *fn, const char *format, va_list args)
-{
-	char *str, buf[32];
-	const char *prioname;
-
-	switch (priority) {
-	case LOG_CRIT:
-		prioname = "FATAL";
-		break;
-	case LOG_ERR:
-		prioname = "ERROR";
-		break;
-	case LOG_WARNING:
-		prioname = "WARNING";
-		break;
-	case LOG_NOTICE:
-		prioname = "NOTICE";
-		break;
-	case LOG_INFO:
-		prioname = "INFO";
-		break;
-	case LOG_DEBUG:
-		prioname = "DEBUG";
-		break;
-	default:
-		snprintf(buf, sizeof(buf), "LOG-%03d", priority);
-		prioname = buf;
-	}
-
-	if (vasprintf(&str, format, args) < 0)
-		return;
-#ifdef ENABLE_DEBUG
-	syslog(LOG_NOTICE, "%s: %s:%d %s() %s", prioname, file, line, fn, str);
-#else
-	syslog(LOG_NOTICE, "%s: %s", prioname, str);
-#endif
-	free(str);
-	(void)data;
-}
-
 static int do_modprobe(int argc, char **orig_argv)
 {
 	struct kmod_ctx *ctx;
@@ -844,8 +752,7 @@ static int do_modprobe(int argc, char **orig_argv)
 
 	argv = prepend_options_from_env(&argc, orig_argv);
 	if (argv == NULL) {
-		fputs("Error: could not prepend options from command line\n",
-			stderr);
+		ERR("Could not prepend options from command line\n");
 		return EXIT_FAILURE;
 	}
 
@@ -904,8 +811,9 @@ static int do_modprobe(int argc, char **orig_argv)
 			size_t bytes = sizeof(char *) * (n_config_paths + 2);
 			void *tmp = realloc(config_paths, bytes);
 			if (!tmp) {
-				fputs("Error: out-of-memory\n", stderr);
-				goto cmdline_failed;
+				ERR("out-of-memory\n");
+				err = -1;
+				goto done;
 			}
 			config_paths = tmp;
 			config_paths[n_config_paths] = optarg;
@@ -936,32 +844,32 @@ static int do_modprobe(int argc, char **orig_argv)
 			break;
 		case 'V':
 			puts(PACKAGE " version " VERSION);
-			if (argv != orig_argv)
-				free(argv);
-			free(config_paths);
-			return EXIT_SUCCESS;
+			err = 0;
+			goto done;
 		case 'h':
-			help(basename(argv[0]));
-			if (argv != orig_argv)
-				free(argv);
-			free(config_paths);
-			return EXIT_SUCCESS;
+			help();
+			err = 0;
+			goto done;
 		case '?':
-			goto cmdline_failed;
+			err = -1;
+			goto done;
 		default:
-			fprintf(stderr, "Error: unexpected getopt_long() value '%c'.\n",
-									c);
-			goto cmdline_failed;
+			ERR("unexpected getopt_long() value '%c'.\n", c);
+			err = -1;
+			goto done;
 		}
 	}
 
 	args = argv + optind;
 	nargs = argc - optind;
 
+	log_open(use_syslog);
+
 	if (!do_show_config) {
 		if (nargs == 0) {
-			fputs("Error: missing parameters. See -h.\n", stderr);
-			goto cmdline_failed;
+			ERR("missing parameters. See -h.\n");
+			err = -1;
+			goto done;
 		}
 	}
 
@@ -971,30 +879,28 @@ static int do_modprobe(int argc, char **orig_argv)
 			root = "";
 		if (kversion == NULL) {
 			if (uname(&u) < 0) {
-				fprintf(stderr, "Error: uname() failed: %s\n",
-					strerror(errno));
-				goto cmdline_failed;
+				ERR("uname() failed: %m\n");
+				err = -1;
+				goto done;
 			}
 			kversion = u.release;
 		}
 		snprintf(dirname_buf, sizeof(dirname_buf),
-				"%s" ROOTPREFIX "/lib/modules/%s", root,
+				"%s/lib/modules/%s", root,
 				kversion);
 		dirname = dirname_buf;
 	}
 
 	ctx = kmod_new(dirname, config_paths);
 	if (!ctx) {
-		fputs("Error: kmod_new() failed!\n", stderr);
-		goto cmdline_failed;
+		ERR("kmod_new() failed!\n");
+		err = -1;
+		goto done;
 	}
-	kmod_load_resources(ctx);
 
-	kmod_set_log_priority(ctx, verbose);
-	if (use_syslog) {
-		openlog("modprobe", LOG_CONS, LOG_DAEMON);
-		kmod_set_log_fn(ctx, log_syslog, NULL);
-	}
+	log_setup_kmod_log(ctx, verbose);
+
+	kmod_load_resources(ctx);
 
 	if (do_show_config)
 		err = show_config(ctx);
@@ -1015,23 +921,16 @@ static int do_modprobe(int argc, char **orig_argv)
 
 	kmod_unref(ctx);
 
-	if (use_syslog)
-		closelog();
+done:
+	log_close();
 
 	if (argv != orig_argv)
 		free(argv);
 
 	free(config_paths);
+
 	return err >= 0 ? EXIT_SUCCESS : EXIT_FAILURE;
-
-cmdline_failed:
-	if (argv != orig_argv)
-		free(argv);
-	free(config_paths);
-	return EXIT_FAILURE;
 }
-
-#include "kmod.h"
 
 const struct kmod_cmd kmod_cmd_compat_modprobe = {
 	.name = "modprobe",

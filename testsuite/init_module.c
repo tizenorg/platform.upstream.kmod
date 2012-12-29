@@ -1,21 +1,23 @@
 /*
  * Copyright (C) 2012  ProFUSION embedded systems
  *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 2 of the License, or
- * (at your option) any later version.
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  */
 
 #include <assert.h>
+#include <elf.h>
 #include <errno.h>
 #include <dirent.h>
 #include <fcntl.h>
@@ -206,6 +208,12 @@ static inline bool module_is_inkernel(const char *modname)
 	return ret;
 }
 
+static uint8_t elf_identify(void *mem)
+{
+	uint8_t *p = mem;
+	return p[EI_CLASS];
+}
+
 TS_EXPORT long init_module(void *mem, unsigned long len, const char *args);
 
 /*
@@ -225,6 +233,8 @@ long init_module(void *mem, unsigned long len, const char *args)
 	const void *buf;
 	uint64_t bufsize;
 	int err;
+	uint8_t class;
+	off_t offset;
 
 	init_retcodes();
 
@@ -236,14 +246,18 @@ long init_module(void *mem, unsigned long len, const char *args)
 								&bufsize);
 	kmod_elf_unref(elf);
 
-	/*
-	 * We couldn't find the module's name inside the ELF file. Just exit
-	 * as if it was successful
-	 */
+	/* We couldn't parse the ELF file. Just exit as if it was successful */
 	if (err < 0)
 		return 0;
 
-	modname = (char *)buf + offsetof(struct module, name);
+	/* We need to open both 32 and 64 bits module - hack! */
+	class = elf_identify(mem);
+	if (class == ELFCLASS64)
+		offset = MODULE_NAME_OFFSET_64;
+	else
+		offset = MODULE_NAME_OFFSET_32;
+
+	modname = (char *)buf + offset;
 	mod = find_module(modules, modname);
 	if (mod != NULL) {
 		errno = mod->errcode;

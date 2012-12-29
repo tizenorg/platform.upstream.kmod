@@ -13,16 +13,7 @@ Features:
    - kmod_module_dependency_symbol_get_crc()
    - kmod_module_versions_free_list()
    - kmod_module_symbols_free_list()
-   - kmod_module_dependency_symbols_free_list(
-
-   Main reason for this is that they need to open and read the module to get
-   this information. If module is compressed, that means uncompressing +
-   allocating necessary space + deallocating for each of them. depmod uses most
-   of these functions and in the end it uncompresses the module ~6x times more
-   than needed, which makes depmod very slow if compared to module-init-tools.
-
-   We might want to either cache the elf file within kmod_module or create
-   another struct that the user ref()/unref().
+   - kmod_module_dependency_symbols_free_list()
 
 * Stop using system() inside the library and use fork + exec instead
 
@@ -34,6 +25,10 @@ Features:
   with mmap(). When lookup() is called and the file is not mmaped, mmap it.
 
 * Implement actions in kmod tool like 'insert', 'remove', 'info', etc
+
+* Finish removal of "rmmod -w" when it's gone from kernel.
+
+* Deprecate not using KMOD_REMOVE_NOWAIT on libkmod.
 
 Things to be added/removed in kernel (check what is really needed):
 ===================================================================

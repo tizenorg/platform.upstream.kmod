@@ -27,8 +27,9 @@
 #include <sys/utsname.h>
 #include <sys/stat.h>
 #include "libkmod.h"
+#include "libkmod-util.h"
 
-#define LOG(fmt, ...) fprintf(stderr, "ERROR: "fmt, ##__VA_ARGS__)
+#include "kmod.h"
 
 static char separator = '\n';
 static const char *field = NULL;
@@ -87,7 +88,7 @@ static int process_parm(const char *key, const char *value, struct param **param
 	struct param *it;
 	const char *colon = strchr(value, ':');
 	if (colon == NULL) {
-		LOG("Found invalid \"%s=%s\": missing ':'\n",
+		ERR("Found invalid \"%s=%s\": missing ':'\n",
 		    key, value);
 		return 0;
 	}
@@ -108,7 +109,7 @@ static int process_parm(const char *key, const char *value, struct param **param
 
 	it = add_param(name, namelen, param, paramlen, type, typelen, params);
 	if (it == NULL) {
-		LOG("Out of memory!\n");
+		ERR("Out of memory!\n");
 		return -ENOMEM;
 	}
 
@@ -182,7 +183,7 @@ static int modinfo_do(struct kmod_module *mod)
 
 	err = kmod_module_get_info(mod, &list);
 	if (err < 0) {
-		LOG("could not get modinfo from '%s': %s\n",
+		ERR("could not get modinfo from '%s': %s\n",
 			kmod_module_get_name(mod), strerror(-err));
 		return err;
 	}
@@ -264,7 +265,7 @@ static int modinfo_path_do(struct kmod_ctx *ctx, const char *path)
 	struct kmod_module *mod;
 	int err = kmod_module_new_from_path(ctx, path, &mod);
 	if (err < 0) {
-		LOG("Module file %s not found.\n", path);
+		ERR("Module file %s not found.\n", path);
 		return err;
 	}
 	err = modinfo_do(mod);
@@ -277,24 +278,24 @@ static int modinfo_alias_do(struct kmod_ctx *ctx, const char *alias)
 	struct kmod_list *l, *filtered, *list = NULL;
 	int err = kmod_module_new_from_lookup(ctx, alias, &list);
 	if (err < 0) {
-		LOG("Module alias %s not found.\n", alias);
+		ERR("Module alias %s not found.\n", alias);
 		return err;
 	}
 
 	if (list == NULL) {
-		LOG("Module %s not found.\n", alias);
+		ERR("Module %s not found.\n", alias);
 		return -ENOENT;
 	}
 
 	err = kmod_module_apply_filter(ctx, KMOD_FILTER_BUILTIN, list, &filtered);
 	kmod_module_unref_list(list);
 	if (err < 0) {
-		LOG("Failed to filter list: %m\n");
+		ERR("Failed to filter list: %m\n");
 		return err;
 	}
 
 	if (filtered == NULL) {
-		LOG("Module %s not found.\n", alias);
+		ERR("Module %s not found.\n", alias);
 		return -ENOENT;
 	}
 
@@ -325,10 +326,9 @@ static const struct option cmdopts[] = {
 	{NULL, 0, 0, 0}
 };
 
-static void help(const char *progname)
+static void help(void)
 {
-	fprintf(stderr,
-		"Usage:\n"
+	printf("Usage:\n"
 		"\t%s [options] filename [args]\n"
 		"Options:\n"
 		"\t-a, --author                Print only 'author'\n"
@@ -339,26 +339,19 @@ static void help(const char *progname)
 		"\t-0, --null                  Use \\0 instead of \\n\n"
 		"\t-F, --field=FIELD           Print only provided FIELD\n"
 		"\t-k, --set-version=VERSION   Use VERSION instead of `uname -r`\n"
-		"\t-b, --basedir=DIR           Use DIR as filesystem root for " ROOTPREFIX "/lib/modules\n"
+		"\t-b, --basedir=DIR           Use DIR as filesystem root for /lib/modules\n"
 		"\t-V, --version               Show version\n"
 		"\t-h, --help                  Show this help\n",
-		progname);
+		program_invocation_short_name);
 }
 
 static bool is_module_filename(const char *name)
 {
 	struct stat st;
-	const char *ptr;
 
 	if (stat(name, &st) == 0 && S_ISREG(st.st_mode) &&
-					(ptr = strstr(name, ".ko")) != NULL) {
-		/*
-		 * We screened for .ko; make sure this is either at the end of
-		 * the name or followed by another '.' (e.g. gz or xz modules)
-		 */
-		if(ptr[3] == '\0' || ptr[3] == '.')
+		path_ends_with_kmod_ext(name, strlen(name)))
 			return true;
-	}
 
 	return false;
 }
@@ -407,7 +400,7 @@ static int do_modinfo(int argc, char *argv[])
 			root = optarg;
 			break;
 		case 'h':
-			help(basename(argv[0]));
+			help();
 			return EXIT_SUCCESS;
 		case 'V':
 			puts(PACKAGE " version " VERSION);
@@ -415,15 +408,13 @@ static int do_modinfo(int argc, char *argv[])
 		case '?':
 			return EXIT_FAILURE;
 		default:
-			fprintf(stderr,
-				"Error: unexpected getopt_long() value '%c'.\n",
-				c);
+			ERR("unexpected getopt_long() value '%c'.\n", c);
 			return EXIT_FAILURE;
 		}
 	}
 
 	if (optind >= argc) {
-		fprintf(stderr, "Error: missing module or filename.\n");
+		ERR("missing module or filename.\n");
 		return EXIT_FAILURE;
 	}
 
@@ -433,20 +424,19 @@ static int do_modinfo(int argc, char *argv[])
 			root = "";
 		if (kversion == NULL) {
 			if (uname(&u) < 0) {
-				fprintf(stderr, "Error: uname() failed: %s\n",
-					strerror(errno));
+				ERR("uname() failed: %m\n");
 				return EXIT_FAILURE;
 			}
 			kversion = u.release;
 		}
-		snprintf(dirname_buf, sizeof(dirname_buf), "%s" ROOTPREFIX "/lib/modules/%s",
+		snprintf(dirname_buf, sizeof(dirname_buf), "%s/lib/modules/%s",
 			 root, kversion);
 		dirname = dirname_buf;
 	}
 
 	ctx = kmod_new(dirname, &null_config);
 	if (!ctx) {
-		fputs("Error: kmod_new() failed!\n", stderr);
+		ERR("kmod_new() failed!\n");
 		return EXIT_FAILURE;
 	}
 
@@ -467,8 +457,6 @@ static int do_modinfo(int argc, char *argv[])
 	kmod_unref(ctx);
 	return err >= 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 }
-
-#include "kmod.h"
 
 const struct kmod_cmd kmod_cmd_compat_modinfo = {
 	.name = "modinfo",

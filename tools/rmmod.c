@@ -25,9 +25,14 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
-#include <syslog.h>
 #include "libkmod.h"
+#include "macro.h"
 
+#include "kmod.h"
+
+#define DEFAULT_VERBOSE LOG_ERR
+static int verbose = DEFAULT_VERBOSE;
+static int use_syslog;
 
 static const char cmdopts_s[] = "fsvVwh";
 static const struct option cmdopts[] = {
@@ -40,10 +45,9 @@ static const struct option cmdopts[] = {
 	{NULL, 0, 0, 0}
 };
 
-static void help(const char *progname)
+static void help(void)
 {
-	fprintf(stderr,
-		"Usage:\n"
+	printf("Usage:\n"
 		"\t%s [options] modulename ...\n"
 		"Options:\n"
 		"\t-f, --force       forces a module unload and may crash your\n"
@@ -52,59 +56,15 @@ static void help(const char *progname)
 		"\t-s, --syslog      print to syslog, not stderr\n"
 		"\t-v, --verbose     enables more messages\n"
 		"\t-V, --version     show version\n"
-		"\t-w, --wait        begins module removal even if it is used and\n"
-		"\t                  will stop new users from accessing it.\n"
 		"\t-h, --help        show this help\n",
-		progname);
-}
-
-static void log_syslog(void *data, int priority, const char *file, int line,
-				const char *fn, const char *format,
-				va_list args)
-{
-	char *str, buf[32];
-	const char *prioname;
-
-	switch (priority) {
-	case LOG_CRIT:
-		prioname = "FATAL";
-		break;
-	case LOG_ERR:
-		prioname = "ERROR";
-		break;
-	case LOG_WARNING:
-		prioname = "WARNING";
-		break;
-	case LOG_NOTICE:
-		prioname = "NOTICE";
-		break;
-	case LOG_INFO:
-		prioname = "INFO";
-		break;
-	case LOG_DEBUG:
-		prioname = "DEBUG";
-		break;
-	default:
-		snprintf(buf, sizeof(buf), "LOG-%03d", priority);
-		prioname = buf;
-	}
-
-	if (vasprintf(&str, format, args) < 0)
-		return;
-#ifdef ENABLE_DEBUG
-	syslog(LOG_NOTICE, "%s: %s:%d %s() %s", prioname, file, line, fn, str);
-#else
-	syslog(LOG_NOTICE, "%s: %s", prioname, str);
-#endif
-	free(str);
-	(void)data;
+		program_invocation_short_name);
 }
 
 static int check_module_inuse(struct kmod_module *mod) {
 	struct kmod_list *holders;
 
 	if (kmod_module_get_initstate(mod) == -ENOENT) {
-		fprintf(stderr, "Error: Module %s is not currently loaded\n",
+		ERR("Module %s is not currently loaded\n",
 				kmod_module_get_name(mod));
 		return -ENOENT;
 	}
@@ -113,8 +73,7 @@ static int check_module_inuse(struct kmod_module *mod) {
 	if (holders != NULL) {
 		struct kmod_list *itr;
 
-		fprintf(stderr, "Error: Module %s is in use by:",
-				kmod_module_get_name(mod));
+		ERR("Module %s is in use by:", kmod_module_get_name(mod));
 
 		kmod_list_foreach(itr, holders) {
 			struct kmod_module *hm = kmod_module_get_module(itr);
@@ -128,8 +87,7 @@ static int check_module_inuse(struct kmod_module *mod) {
 	}
 
 	if (kmod_module_get_refcnt(mod) != 0) {
-		fprintf(stderr, "Error: Module %s is in use\n",
-				kmod_module_get_name(mod));
+		ERR("Module %s is in use\n", kmod_module_get_name(mod));
 		return -EBUSY;
 	}
 
@@ -141,8 +99,6 @@ static int do_rmmod(int argc, char *argv[])
 	struct kmod_ctx *ctx;
 	const char *null_config = NULL;
 	int flags = KMOD_REMOVE_NOWAIT;
-	int use_syslog = 0;
-	int verbose = 0;
 	int i, err, r = 0;
 
 	for (;;) {
@@ -161,10 +117,12 @@ static int do_rmmod(int argc, char *argv[])
 			verbose++;
 			break;
 		case 'w':
+			ERR("'Wait' behavior is targeted for removal from kernel.\nWe will now sleep for 10s, and then continue.\n");
+			sleep(10);
 			flags &= ~KMOD_REMOVE_NOWAIT;
 			break;
 		case 'h':
-			help(basename(argv[0]));
+			help();
 			return EXIT_SUCCESS;
 		case 'V':
 			puts(PACKAGE " version " VERSION);
@@ -172,29 +130,27 @@ static int do_rmmod(int argc, char *argv[])
 		case '?':
 			return EXIT_FAILURE;
 		default:
-			fprintf(stderr,
-				"Error: unexpected getopt_long() value '%c'.\n",
-				c);
+			ERR("unexpected getopt_long() value '%c'.\n", c);
 			return EXIT_FAILURE;
 		}
 	}
 
+	log_open(use_syslog);
+
 	if (optind >= argc) {
-		fprintf(stderr, "Error: missing module name.\n");
-		return EXIT_FAILURE;
+		ERR("missing module name.\n");
+		r = EXIT_FAILURE;
+		goto done;
 	}
 
 	ctx = kmod_new(NULL, &null_config);
 	if (!ctx) {
-		fputs("Error: kmod_new() failed!\n", stderr);
-		return EXIT_FAILURE;
+		ERR("kmod_new() failed!\n");
+		r = EXIT_FAILURE;
+		goto done;
 	}
 
-	kmod_set_log_priority(ctx, kmod_get_log_priority(ctx) + verbose);
-	if (use_syslog) {
-		openlog("rmmod", LOG_CONS, LOG_DAEMON);
-		kmod_set_log_fn(ctx, log_syslog, NULL);
-	}
+	log_setup_kmod_log(ctx, verbose);
 
 	for (i = optind; i < argc; i++) {
 		struct kmod_module *mod;
@@ -206,8 +162,8 @@ static int do_rmmod(int argc, char *argv[])
 			err = kmod_module_new_from_name(ctx, arg, &mod);
 
 		if (err < 0) {
-			fprintf(stderr, "Error: could not use module %s: %s\n",
-				arg, strerror(-err));
+			ERR("could not use module %s: %s\n", arg,
+			    strerror(-err));
 			break;
 		}
 
@@ -219,9 +175,8 @@ static int do_rmmod(int argc, char *argv[])
 
 		err = kmod_module_remove_module(mod, flags);
 		if (err < 0) {
-			fprintf(stderr,
-				"Error: could not remove module %s: %s\n",
-				arg, strerror(-err));
+			ERR("could not remove module %s: %s\n", arg,
+			    strerror(-err));
 			r++;
 		}
 next:
@@ -230,13 +185,11 @@ next:
 
 	kmod_unref(ctx);
 
-	if (use_syslog)
-		closelog();
+done:
+	log_close();
 
 	return r == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 }
-
-#include "kmod.h"
 
 const struct kmod_cmd kmod_cmd_compat_rmmod = {
 	.name = "rmmod",

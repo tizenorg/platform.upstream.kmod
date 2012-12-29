@@ -60,6 +60,7 @@ struct kmod_module {
 	const char *install_commands;	/* owned by kmod_config */
 	const char *remove_commands;	/* owned by kmod_config */
 	char *alias; /* only set if this module was created from an alias */
+	struct kmod_file *file;
 	int n_dep;
 	int refcount;
 	struct {
@@ -436,6 +437,10 @@ KMOD_EXPORT struct kmod_module *kmod_module_unref(struct kmod_module *mod)
 
 	kmod_pool_del_module(mod->ctx, mod, mod->hashkey);
 	kmod_module_unref_list(mod->dep);
+
+	if (mod->file)
+		kmod_file_unref(mod->file);
+
 	kmod_unref(mod->ctx);
 	free(mod->options);
 	free(mod->path);
@@ -1172,9 +1177,15 @@ KMOD_EXPORT int kmod_module_probe_insert_module(struct kmod_module *mod,
 			return 0;
 	}
 
-	err = flags & (KMOD_PROBE_APPLY_BLACKLIST |
-					KMOD_PROBE_APPLY_BLACKLIST_ALL);
-	if (err != 0) {
+	/*
+	 * Ugly assignement + check. We need to check if we were told to check
+	 * blacklist and also return the reason why we failed.
+	 * KMOD_PROBE_APPLY_BLACKLIST_ALIAS_ONLY will take effect only if the
+	 * module is an alias, so we also need to check it
+	 */
+	if ((mod->alias != NULL && ((err = flags & KMOD_PROBE_APPLY_BLACKLIST_ALIAS_ONLY)))
+			|| (err = flags & KMOD_PROBE_APPLY_BLACKLIST_ALL)
+			|| (err = flags & KMOD_PROBE_APPLY_BLACKLIST)) {
 		if (module_is_blacklisted(mod))
 			return err;
 	}
@@ -1679,22 +1690,43 @@ KMOD_EXPORT int kmod_module_get_initstate(const struct kmod_module *mod)
  * kmod_module_get_size:
  * @mod: kmod module
  *
- * Get the size of this kmod module as returned by Linux kernel. It reads the
- * file /proc/modules to search for this module and get its size.
+ * Get the size of this kmod module as returned by Linux kernel. If supported,
+ * the size is read from the coresize attribute in /sys/module. For older
+ * kernels, this falls back on /proc/modules and searches for the specified
+ * module to get its size.
  *
  * Returns: the size of this kmod module.
  */
 KMOD_EXPORT long kmod_module_get_size(const struct kmod_module *mod)
 {
-	// FIXME TODO: this should be available from /sys/module/foo
 	FILE *fp;
 	char line[4096];
 	int lineno = 0;
 	long size = -ENOENT;
+	int dfd, cfd;
 
 	if (mod == NULL)
 		return -ENOENT;
 
+	/* try to open the module dir in /sys. If this fails, don't
+	 * bother trying to find the size as we know the module isn't
+	 * loaded.
+	 */
+	snprintf(line, sizeof(line), "/sys/module/%s", mod->name);
+	dfd = open(line, O_RDONLY);
+	if (dfd < 0)
+		return -errno;
+
+	/* available as of linux 3.3.x */
+	cfd = openat(dfd, "coresize", O_RDONLY|O_CLOEXEC);
+	if (cfd >= 0) {
+		if (read_str_long(cfd, &size, 10) < 0)
+			ERR(mod->ctx, "failed to read coresize from %s\n", line);
+		close(cfd);
+		goto done;
+	}
+
+	/* fall back on parsing /proc/modules */
 	fp = fopen("/proc/modules", "re");
 	if (fp == NULL) {
 		int err = -errno;
@@ -1729,6 +1761,9 @@ KMOD_EXPORT long kmod_module_get_size(const struct kmod_module *mod)
 		break;
 	}
 	fclose(fp);
+
+done:
+	close(dfd);
 	return size;
 }
 
@@ -2013,6 +2048,25 @@ KMOD_EXPORT void kmod_module_section_free_list(struct kmod_list *list)
 	}
 }
 
+static struct kmod_elf *kmod_module_get_elf(const struct kmod_module *mod)
+{
+	if (mod->file == NULL) {
+		const char *path = kmod_module_get_path(mod);
+
+		if (path == NULL) {
+			errno = ENOENT;
+			return NULL;
+		}
+
+		((struct kmod_module *)mod)->file = kmod_file_open(mod->ctx,
+									path);
+		if (mod->file == NULL)
+			return NULL;
+	}
+
+	return kmod_file_get_elf(mod->file);
+}
+
 struct kmod_module_info {
 	char *key;
 	char value[];
@@ -2058,12 +2112,8 @@ static void kmod_module_info_free(struct kmod_module_info *info)
  */
 KMOD_EXPORT int kmod_module_get_info(const struct kmod_module *mod, struct kmod_list **list)
 {
-	struct kmod_file *file;
 	struct kmod_elf *elf;
-	const char *path;
-	const void *mem;
 	char **strings;
-	size_t size;
 	int i, count, ret = 0;
 
 	if (mod == NULL || list == NULL)
@@ -2071,28 +2121,13 @@ KMOD_EXPORT int kmod_module_get_info(const struct kmod_module *mod, struct kmod_
 
 	assert(*list == NULL);
 
-	path = kmod_module_get_path(mod);
-	if (path == NULL)
-		return -ENOENT;
-
-	file = kmod_file_open(mod->ctx, path);
-	if (file == NULL)
+	elf = kmod_module_get_elf(mod);
+	if (elf == NULL)
 		return -errno;
 
-	size = kmod_file_get_size(file);
-	mem = kmod_file_get_contents(file);
-
-	elf = kmod_elf_new(mem, size);
-	if (elf == NULL) {
-		ret = -errno;
-		goto elf_open_error;
-	}
-
 	count = kmod_elf_get_strings(elf, ".modinfo", &strings);
-	if (count < 0) {
-		ret = count;
-		goto get_strings_error;
-	}
+	if (count < 0)
+		return count;
 
 	for (i = 0; i < count; i++) {
 		struct kmod_module_info *info;
@@ -2134,11 +2169,6 @@ KMOD_EXPORT int kmod_module_get_info(const struct kmod_module *mod, struct kmod_
 
 list_error:
 	free(strings);
-get_strings_error:
-	kmod_elf_unref(elf);
-elf_open_error:
-	kmod_file_unref(file);
-
 	return ret;
 }
 
@@ -2236,12 +2266,8 @@ static void kmod_module_version_free(struct kmod_module_version *version)
  */
 KMOD_EXPORT int kmod_module_get_versions(const struct kmod_module *mod, struct kmod_list **list)
 {
-	struct kmod_file *file;
 	struct kmod_elf *elf;
-	const char *path;
-	const void *mem;
 	struct kmod_modversion *versions;
-	size_t size;
 	int i, count, ret = 0;
 
 	if (mod == NULL || list == NULL)
@@ -2249,28 +2275,13 @@ KMOD_EXPORT int kmod_module_get_versions(const struct kmod_module *mod, struct k
 
 	assert(*list == NULL);
 
-	path = kmod_module_get_path(mod);
-	if (path == NULL)
-		return -ENOENT;
-
-	file = kmod_file_open(mod->ctx, path);
-	if (file == NULL)
+	elf = kmod_module_get_elf(mod);
+	if (elf == NULL)
 		return -errno;
 
-	size = kmod_file_get_size(file);
-	mem = kmod_file_get_contents(file);
-
-	elf = kmod_elf_new(mem, size);
-	if (elf == NULL) {
-		ret = -errno;
-		goto elf_open_error;
-	}
-
 	count = kmod_elf_get_modversions(elf, &versions);
-	if (count < 0) {
-		ret = count;
-		goto get_strings_error;
-	}
+	if (count < 0)
+		return count;
 
 	for (i = 0; i < count; i++) {
 		struct kmod_module_version *mv;
@@ -2299,11 +2310,6 @@ KMOD_EXPORT int kmod_module_get_versions(const struct kmod_module *mod, struct k
 
 list_error:
 	free(versions);
-get_strings_error:
-	kmod_elf_unref(elf);
-elf_open_error:
-	kmod_file_unref(file);
-
 	return ret;
 }
 
@@ -2401,12 +2407,8 @@ static void kmod_module_symbol_free(struct kmod_module_symbol *symbol)
  */
 KMOD_EXPORT int kmod_module_get_symbols(const struct kmod_module *mod, struct kmod_list **list)
 {
-	struct kmod_file *file;
 	struct kmod_elf *elf;
-	const char *path;
-	const void *mem;
 	struct kmod_modversion *symbols;
-	size_t size;
 	int i, count, ret = 0;
 
 	if (mod == NULL || list == NULL)
@@ -2414,28 +2416,13 @@ KMOD_EXPORT int kmod_module_get_symbols(const struct kmod_module *mod, struct km
 
 	assert(*list == NULL);
 
-	path = kmod_module_get_path(mod);
-	if (path == NULL)
-		return -ENOENT;
-
-	file = kmod_file_open(mod->ctx, path);
-	if (file == NULL)
+	elf = kmod_module_get_elf(mod);
+	if (elf == NULL)
 		return -errno;
 
-	size = kmod_file_get_size(file);
-	mem = kmod_file_get_contents(file);
-
-	elf = kmod_elf_new(mem, size);
-	if (elf == NULL) {
-		ret = -errno;
-		goto elf_open_error;
-	}
-
 	count = kmod_elf_get_symbols(elf, &symbols);
-	if (count < 0) {
-		ret = count;
-		goto get_strings_error;
-	}
+	if (count < 0)
+		return count;
 
 	for (i = 0; i < count; i++) {
 		struct kmod_module_symbol *mv;
@@ -2464,11 +2451,6 @@ KMOD_EXPORT int kmod_module_get_symbols(const struct kmod_module *mod, struct km
 
 list_error:
 	free(symbols);
-get_strings_error:
-	kmod_elf_unref(elf);
-elf_open_error:
-	kmod_file_unref(file);
-
 	return ret;
 }
 
@@ -2569,12 +2551,8 @@ static void kmod_module_dependency_symbol_free(struct kmod_module_dependency_sym
  */
 KMOD_EXPORT int kmod_module_get_dependency_symbols(const struct kmod_module *mod, struct kmod_list **list)
 {
-	struct kmod_file *file;
 	struct kmod_elf *elf;
-	const char *path;
-	const void *mem;
 	struct kmod_modversion *symbols;
-	size_t size;
 	int i, count, ret = 0;
 
 	if (mod == NULL || list == NULL)
@@ -2582,28 +2560,13 @@ KMOD_EXPORT int kmod_module_get_dependency_symbols(const struct kmod_module *mod
 
 	assert(*list == NULL);
 
-	path = kmod_module_get_path(mod);
-	if (path == NULL)
-		return -ENOENT;
-
-	file = kmod_file_open(mod->ctx, path);
-	if (file == NULL)
+	elf = kmod_module_get_elf(mod);
+	if (elf == NULL)
 		return -errno;
 
-	size = kmod_file_get_size(file);
-	mem = kmod_file_get_contents(file);
-
-	elf = kmod_elf_new(mem, size);
-	if (elf == NULL) {
-		ret = -errno;
-		goto elf_open_error;
-	}
-
 	count = kmod_elf_get_dependency_symbols(elf, &symbols);
-	if (count < 0) {
-		ret = count;
-		goto get_strings_error;
-	}
+	if (count < 0)
+		return count;
 
 	for (i = 0; i < count; i++) {
 		struct kmod_module_dependency_symbol *mv;
@@ -2634,11 +2597,6 @@ KMOD_EXPORT int kmod_module_get_dependency_symbols(const struct kmod_module *mod
 
 list_error:
 	free(symbols);
-get_strings_error:
-	kmod_elf_unref(elf);
-elf_open_error:
-	kmod_file_unref(file);
-
 	return ret;
 }
 

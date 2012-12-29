@@ -1,4 +1,8 @@
-SUBDIRS = . libkmod/docs man
+SUBDIRS = . libkmod/docs
+
+if BUILD_MANPAGES
+SUBDIRS += man
+endif
 
 DISTCLEAN_LOCAL_HOOKS =
 EXTRA_DIST =
@@ -9,7 +13,6 @@ AM_MAKEFLAGS = --no-print-directory
 AM_CPPFLAGS = \
 	-include $(top_builddir)/config.h \
 	-I$(top_srcdir)/libkmod \
-	-DROOTPREFIX=\""$(rootprefix)"\" \
 	-DSYSCONFDIR=\""$(sysconfdir)"\" \
 	-DLIBEXECDIR=\""$(libexecdir)"\" \
 	${zlib_CFLAGS}
@@ -33,9 +36,9 @@ SED_PROCESS = \
 %.pc: %.pc.in Makefile
 	$(SED_PROCESS)
 
-LIBKMOD_CURRENT=3
-LIBKMOD_REVISION=3
-LIBKMOD_AGE=1
+LIBKMOD_CURRENT=4
+LIBKMOD_REVISION=2
+LIBKMOD_AGE=2
 
 noinst_LTLIBRARIES = libkmod/libkmod-util.la
 libkmod_libkmod_util_la_SOURCES = libkmod/libkmod-hash.c \
@@ -62,7 +65,7 @@ libkmod_libkmod_la_SOURCES =\
 	libkmod/libkmod-elf.c
 
 EXTRA_DIST += libkmod/libkmod.sym
-EXTRA_DIST += libkmod/COPYING libkmod/README
+EXTRA_DIST += libkmod/README libkmod/COPYING testsuite/COPYING COPYING
 
 libkmod_libkmod_la_LDFLAGS = $(AM_LDFLAGS) \
 	-version-info $(LIBKMOD_CURRENT):$(LIBKMOD_REVISION):$(LIBKMOD_AGE) \
@@ -105,7 +108,7 @@ noinst_SCRIPTS = tools/insmod tools/rmmod tools/lsmod \
 tools_kmod_SOURCES = tools/kmod.c tools/kmod.h tools/lsmod.c \
 		     tools/rmmod.c tools/insmod.c \
 		     tools/modinfo.c tools/modprobe.c \
-		     tools/depmod.c
+		     tools/depmod.c tools/log.h tools/log.c
 tools_kmod_LDADD = libkmod/libkmod-util.la \
 		   libkmod/libkmod.la
 
@@ -132,6 +135,7 @@ CREATE_ROOTFS = $(AM_V_GEN) ( $(RM) -rf $(ROOTFS) && \
 
 rootfs:
 	$(CREATE_ROOTFS)
+.PHONY: rootfs
 
 $(ROOTFS): $(ROOTFS_PRISTINE)
 	$(CREATE_ROOTFS)
@@ -141,6 +145,8 @@ TESTSUITE_OVERRIDE_LIBS = testsuite/uname.la testsuite/path.la \
 			  testsuite/delete_module.la
 TESTSUITE_OVERRIDE_LIBS_LDFLAGS = avoid-version -module -shared -export-dynamic \
 				  -rpath /nowhere -ldl
+
+check-am: rootfs
 
 check_LTLIBRARIES = $(TESTSUITE_OVERRIDE_LIBS)
 
@@ -170,7 +176,9 @@ testsuite_libtestsuite_la_LIBADD = -lrt
 
 TESTSUITE = testsuite/test-init testsuite/test-testsuite testsuite/test-loaded \
 	    testsuite/test-modinfo testsuite/test-alias testsuite/test-new-module \
-	    testsuite/test-modprobe testsuite/test-blacklist testsuite/test-dependencies
+	    testsuite/test-modprobe testsuite/test-blacklist \
+	    testsuite/test-dependencies testsuite/test-depmod
+
 check_PROGRAMS = $(TESTSUITE)
 TESTS = $(TESTSUITE)
 
@@ -192,10 +200,12 @@ testsuite_test_blacklist_LDADD = $(TESTSUITE_LDADD)
 testsuite_test_blacklist_CPPFLAGS = $(TESTSUITE_CPPFLAGS)
 testsuite_test_dependencies_LDADD = $(TESTSUITE_LDADD)
 testsuite_test_dependencies_CPPFLAGS = $(TESTSUITE_CPPFLAGS)
+testsuite_test_depmod_LDADD = $(TESTSUITE_LDADD)
+testsuite_test_depmod_CPPFLAGS = $(TESTSUITE_CPPFLAGS)
 
 testsuite-distclean:
-	-$(RM) -rf $(ROOTFS)
-	-$(RM) testsuite/stamp-rootfs
+	$(RM) -r $(ROOTFS)
+	$(RM) testsuite/stamp-rootfs
 
 DISTCLEAN_LOCAL_HOOKS += testsuite-distclean
 EXTRA_DIST += testsuite/rootfs-pristine
