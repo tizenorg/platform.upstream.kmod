@@ -42,7 +42,7 @@ This package contains traditional name symlinks (lsmod, etc.)
 %package -n %lname
 License:        LGPL-2.1+
 Summary:        Library to interact with Linux kernel modules
-Group:          System/Libraries
+Group:          System/Kernel
 
 %description -n %lname
 libkmod was created to allow programs to easily insert, remove and
@@ -51,7 +51,7 @@ list modules, also checking its properties, dependencies and aliases.
 %package -n libkmod-devel
 License:        LGPL-2.1+
 Summary:        Development files for libkmod
-Group:          Development/Libraries/C and C++
+Group:          Development/Libraries
 Requires:       %lname = %{version}
 
 %description -n libkmod-devel
@@ -99,6 +99,7 @@ done;
 
 %files
 %defattr(-,root,root)
+%license COPYING
 %{_bindir}/kmod
 
 %files -n %lname
