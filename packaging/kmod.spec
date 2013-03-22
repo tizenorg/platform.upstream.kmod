@@ -5,7 +5,7 @@ License:        LGPL-2.1+ and GPL-2.0+
 %define lname	libkmod
 Summary:        Utilities to load modules into the kernel
 Url:            http://www.politreco.com/2011/12/announce-kmod-2/
-Group:          System/Kernel
+Group:          Base/Libraries
 
 Source:         %{name}-%{version}.tar.xz
 BuildRequires:  autoconf
@@ -28,7 +28,7 @@ indexes from module-init-tools project.
 %package compat
 License:        GPL-2.0+
 Summary:        Compat symlinks for kernel module utilities
-Group:          System/Kernel
+Group:          Base/Libraries
 Requires(pre):	filesystem
 Provides:       module-init-tools
 
@@ -42,7 +42,7 @@ This package contains traditional name symlinks (lsmod, etc.)
 %package -n %lname
 License:        LGPL-2.1+
 Summary:        Library to interact with Linux kernel modules
-Group:          System/Kernel
+Group:          Base/Libraries
 
 %description -n %lname
 libkmod was created to allow programs to easily insert, remove and
