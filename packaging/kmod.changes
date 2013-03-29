@@ -1,3 +1,6 @@
+* Fri Mar 29 2013 Anas Nashif <anas.nashif@intel.com> submit/trunk/20130322.175427@31c7f1c
+- compat requires main package
+
 * Fri Mar 22 2013 Anas Nashif <anas.nashif@intel.com> submit/trunk/20130318.205410@9d87275
 - Fixed package groups
 
