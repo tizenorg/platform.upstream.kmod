@@ -2,7 +2,6 @@ Name:           kmod
 Version:        12
 Release:        0
 License:        LGPL-2.1+ and GPL-2.0+
-%define lname	libkmod
 Summary:        Utilities to load modules into the kernel
 Url:            http://www.politreco.com/2011/12/announce-kmod-2/
 Group:          Base/Libraries
@@ -29,6 +28,7 @@ indexes from module-init-tools project.
 License:        GPL-2.0+
 Summary:        Compat symlinks for kernel module utilities
 Group:          Base/Libraries
+Requires:       kmod
 Requires(pre):	filesystem
 Provides:       module-init-tools
 
@@ -39,12 +39,12 @@ dependencies and aliases.
 
 This package contains traditional name symlinks (lsmod, etc.)
 
-%package -n %lname
+%package -n libkmod
 License:        LGPL-2.1+
 Summary:        Library to interact with Linux kernel modules
 Group:          Base/Libraries
 
-%description -n %lname
+%description -n libkmod
 libkmod was created to allow programs to easily insert, remove and
 list modules, also checking its properties, dependencies and aliases.
 
@@ -52,14 +52,14 @@ list modules, also checking its properties, dependencies and aliases.
 License:        LGPL-2.1+
 Summary:        Development files for libkmod
 Group:          Development/Libraries
-Requires:       %lname = %{version}
+Requires:       libkmod = %{version}
 
 %description -n libkmod-devel
 libkmod was created to allow programs to easily insert, remove and
 list modules, also checking its properties, dependencies and aliases.
 
 This package contains the development headers for the library found
-in %lname.
+in libkmod.
 
 %prep
 %setup -q
@@ -91,9 +91,9 @@ for i in depmod insmod lsmod modinfo modprobe rmmod; do
 done;
 
 
-%post -n %lname -p /sbin/ldconfig
+%post -n libkmod -p /sbin/ldconfig
 
-%postun -n %lname -p /sbin/ldconfig
+%postun -n libkmod -p /sbin/ldconfig
 
 %docs_package
 
@@ -102,7 +102,7 @@ done;
 %license COPYING
 %{_bindir}/kmod
 
-%files -n %lname
+%files -n libkmod
 %defattr(-,root,root)
 %{_libdir}/libkmod.so.2*
 
