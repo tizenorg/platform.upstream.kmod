@@ -7,6 +7,7 @@ Url:            http://www.politreco.com/2011/12/announce-kmod-2/
 Group:          Base/Libraries
 
 Source:         %{name}-%{version}.tar.xz
+Source1001: 	kmod.manifest
 BuildRequires:  autoconf
 BuildRequires:  automake
 BuildRequires:  libtool
@@ -63,6 +64,7 @@ in libkmod.
 
 %prep
 %setup -q
+cp %{SOURCE1001} .
 
 %build
 autoreconf -fi
@@ -98,21 +100,25 @@ done;
 %docs_package
 
 %files
+%manifest %{name}.manifest
 %defattr(-,root,root)
 %license COPYING
 %{_bindir}/kmod
 
 %files -n libkmod
+%manifest %{name}.manifest
 %defattr(-,root,root)
 %{_libdir}/libkmod.so.2*
 
 %files -n libkmod-devel
+%manifest %{name}.manifest
 %defattr(-,root,root)
 %{_includedir}/*
 %{_libdir}/pkgconfig/libkmod.pc
 %{_libdir}/libkmod.so
 
 %files compat
+%manifest %{name}.manifest
 %defattr(-,root,root)
 %{_bindir}/lsmod
 %{_sbindir}/depmod
