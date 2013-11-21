@@ -1,11 +1,10 @@
 Name:           kmod
-Version:        12
+Version:        15
 Release:        0
 License:        LGPL-2.1+ and GPL-2.0+
 Summary:        Utilities to load modules into the kernel
 Url:            http://www.politreco.com/2011/12/announce-kmod-2/
 Group:          Base/Libraries
-
 Source:         %{name}-%{version}.tar.xz
 Source1001: 	kmod.manifest
 BuildRequires:  autoconf
@@ -104,6 +103,8 @@ done;
 %defattr(-,root,root)
 %license COPYING
 %{_bindir}/kmod
+%dir %{_datadir}/bash-completion/completions
+%{_datadir}/bash-completion/completions/kmod
 
 %files -n libkmod
 %manifest %{name}.manifest
