@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2012  ProFUSION embedded systems
+ * Copyright (C) 2012-2013  ProFUSION embedded systems
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -70,6 +70,30 @@ static DEFINE_TEST(modprobe_show_depends2,
 		.stdout = TESTSUITE_ROOTFS "test-modprobe/show-depends/correct-psmouse.txt",
 	});
 
+
+static __noreturn int modprobe_show_alias_to_none(const struct test *t)
+{
+	const char *progname = ABS_TOP_BUILDDIR "/tools/modprobe";
+	const char *const args[] = {
+		progname,
+		"--show-depends", "--ignore-install", "--quiet", "psmouse",
+		NULL,
+	};
+
+	test_spawn_prog(progname, args);
+	exit(EXIT_FAILURE);
+}
+static DEFINE_TEST(modprobe_show_alias_to_none,
+	.description = "check if modprobe --show-depends doesn't explode with an alias to nothing",
+	.config = {
+		[TC_UNAME_R] = "4.4.4",
+		[TC_ROOTFS] = TESTSUITE_ROOTFS "test-modprobe/alias-to-none",
+	},
+	.output = {
+		.stdout = TESTSUITE_ROOTFS "test-modprobe/show-depends/correct-psmouse.txt",
+	});
+
+
 static __noreturn int modprobe_builtin(const struct test *t)
 {
 	const char *progname = ABS_TOP_BUILDDIR "/tools/modprobe";
@@ -134,12 +158,37 @@ static DEFINE_TEST(modprobe_install_cmd_loop,
 		},
 	);
 
+static __noreturn int modprobe_param_kcmdline(const struct test *t)
+{
+	const char *progname = ABS_TOP_BUILDDIR "/tools/modprobe";
+	const char *const args[] = {
+		progname,
+		"--show-depends", "psmouse",
+		NULL,
+	};
+
+	test_spawn_prog(progname, args);
+	exit(EXIT_FAILURE);
+}
+static DEFINE_TEST(modprobe_param_kcmdline,
+	.description = "check if params are parsed correctly from kcmdline",
+	.config = {
+		[TC_UNAME_R] = "4.4.4",
+		[TC_ROOTFS] = TESTSUITE_ROOTFS "test-modprobe/module-param-kcmdline",
+	},
+	.output = {
+		.stdout = TESTSUITE_ROOTFS "test-modprobe/module-param-kcmdline/correct.txt",
+	});
+
+
 static const struct test *tests[] = {
 	&smodprobe_show_depends,
 	&smodprobe_show_depends2,
+	&smodprobe_show_alias_to_none,
 	&smodprobe_builtin,
 	&smodprobe_softdep_loop,
 	&smodprobe_install_cmd_loop,
+	&smodprobe_param_kcmdline,
 	NULL,
 };
 

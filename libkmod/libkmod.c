@@ -1,7 +1,7 @@
 /*
  * libkmod - interface to kernel module operations
  *
- * Copyright (C) 2011-2012  ProFUSION embedded systems
+ * Copyright (C) 2011-2013  ProFUSION embedded systems
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -33,7 +33,7 @@
 #include <sys/stat.h>
 
 #include "libkmod.h"
-#include "libkmod-private.h"
+#include "libkmod-internal.h"
 #include "libkmod-index.h"
 
 #define KMOD_HASH_SIZE (256)
@@ -99,6 +99,7 @@ void kmod_log(const struct kmod_ctx *ctx,
 	va_end(args);
 }
 
+_printf_format_(6, 0)
 static void log_filep(void *data,
 			int priority, const char *file, int line,
 			const char *fn, const char *format, va_list args)
@@ -218,8 +219,8 @@ static char *get_kernel_release(const char *dirname)
  * kmod_new:
  * @dirname: what to consider as linux module's directory, if NULL
  *           defaults to /lib/modules/`uname -r`. If it's relative,
- *           it's treated as relative to current the current working
- *           directory. Otherwise, give an absolute dirname.
+ *           it's treated as relative to the current working directory.
+ *           Otherwise, give an absolute dirname.
  * @config_paths: ordered array of paths (directories or files) where
  *                to load from user-defined configuration parameters such as
  *                alias, blacklists, commands (install, remove). If
@@ -254,7 +255,7 @@ KMOD_EXPORT struct kmod_ctx *kmod_new(const char *dirname,
 	ctx->dirname = get_kernel_release(dirname);
 
 	/* environment overwrites config */
-	env = getenv("KMOD_LOG");
+	env = secure_getenv("KMOD_LOG");
 	if (env != NULL)
 		kmod_set_log_priority(ctx, log_priority(env));
 
@@ -306,6 +307,8 @@ KMOD_EXPORT struct kmod_ctx *kmod_ref(struct kmod_ctx *ctx)
  *
  * Drop a reference of the kmod library context. If the refcount
  * reaches zero, the resources of the context will be released.
+ *
+ * Returns: the passed kmod library context or NULL if it's freed
  */
 KMOD_EXPORT struct kmod_ctx *kmod_unref(struct kmod_ctx *ctx)
 {
@@ -853,7 +856,11 @@ KMOD_EXPORT void kmod_unload_resources(struct kmod_ctx *ctx)
 /**
  * kmod_dump_index:
  * @ctx: kmod library context
- * @type: index to dump
+ * @type: index to dump, valid indexes are
+ * KMOD_INDEX_MODULES_DEP: index of module dependencies;
+ * KMOD_INDEX_MODULES_ALIAS: index of module aliases;
+ * KMOD_INDEX_MODULES_SYMBOL: index of symbol aliases;
+ * KMOD_INDEX_MODULES_BUILTIN: index of builtin module.
  * @fd: file descriptor to dump index to
  *
  * Dump index to file descriptor. Note that this function doesn't use stdio.h

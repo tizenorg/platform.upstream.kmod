@@ -1,6 +1,6 @@
 AC_PREREQ(2.60)
 AC_INIT([kmod],
-	[12],
+	[15],
 	[linux-modules@vger.kernel.org],
 	[kmod],
 	[http://git.kernel.org/?p=utils/kernel/kmod/kmod.git])
@@ -8,7 +8,7 @@ AC_INIT([kmod],
 AC_CONFIG_SRCDIR([libkmod/libkmod.c])
 AC_CONFIG_AUX_DIR([build-aux])
 AM_INIT_AUTOMAKE([check-news foreign 1.11 silent-rules
-	tar-pax no-dist-gzip dist-xz subdir-objects color-tests])
+	tar-pax no-dist-gzip dist-xz subdir-objects color-tests parallel-tests])
 AC_PROG_CC_STDC
 AC_USE_SYSTEM_EXTENSIONS
 AC_SYS_LARGEFILE
@@ -17,6 +17,10 @@ m4_ifndef([AM_SILENT_RULES], [m4_define([AM_SILENT_RULES],[])])
 AM_SILENT_RULES([yes])
 LT_INIT([disable-static pic-only])
 AC_PREFIX_DEFAULT([/usr])
+
+AS_IF([test "x$enable_static" = "xyes"],
+      [AC_MSG_ERROR([--enable-static is not supported by kmod])])
+
 
 #####################################################################
 # Program checks and configurations
@@ -39,9 +43,14 @@ PKG_PROG_PKG_CONFIG
 #####################################################################
 
 AC_CHECK_FUNCS_ONCE(__xstat)
+AC_CHECK_FUNCS_ONCE([__secure_getenv secure_getenv])
+AC_CHECK_FUNCS_ONCE([finit_module])
 
 # dietlibc doesn't have st.st_mtim struct member
 AC_CHECK_MEMBERS([struct stat.st_mtim], [], [], [#include <sys/stat.h>])
+
+# Check kernel headers
+AC_CHECK_HEADERS_ONCE([linux/module.h])
 
 
 #####################################################################
@@ -73,6 +82,15 @@ AS_IF([test "x$with_zlib" != "xno"], [
 	AC_MSG_NOTICE([zlib support not requested])
 ])
 
+AC_ARG_WITH([bashcompletiondir],
+	AS_HELP_STRING([--with-bashcompletiondir=DIR], [Bash completions directory]),
+	[],
+	[AS_IF([$($PKG_CONFIG --exists bash-completion)], [
+		with_bashcompletiondir=$($PKG_CONFIG --variable=completionsdir bash-completion)
+	] , [
+		with_bashcompletiondir=${datadir}/bash-completion/completions
+	])])
+AC_SUBST([bashcompletiondir], [$with_bashcompletiondir])
 
 #####################################################################
 # --enable-
@@ -185,7 +203,7 @@ AC_CONFIG_FILES([
 AC_OUTPUT
 AC_MSG_RESULT([
 	$PACKAGE $VERSION
-	======
+	=======
 
 	prefix:			${prefix}
 	sysconfdir:		${sysconfdir}
@@ -193,6 +211,7 @@ AC_MSG_RESULT([
 	rootlibdir:		${rootlibdir}
 	includedir:		${includedir}
 	bindir:			${bindir}
+	Bash completions dir:   ${with_bashcompletiondir}
 
 	compiler:		${CC}
 	cflags:			${with_cflags} ${CFLAGS}

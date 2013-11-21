@@ -1,7 +1,7 @@
 /*
  * kmod-modprobe - manage linux kernel modules using libkmod.
  *
- * Copyright (C) 2011-2012  ProFUSION embedded systems
+ * Copyright (C) 2011-2013  ProFUSION embedded systems
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -142,6 +142,7 @@ static void help(void)
 		program_invocation_short_name, program_invocation_short_name);
 }
 
+_printf_format_(1, 2)
 static inline void _show(const char *fmt, ...)
 {
 	va_list args;
@@ -385,7 +386,7 @@ static int rmmod_do_module(struct kmod_module *mod, bool do_dependencies)
 			goto error;
 	}
 
-	if (!ignore_loaded) {
+	if (!ignore_loaded && !cmd) {
 		int usage = kmod_module_get_refcnt(mod);
 
 		if (usage > 0) {
@@ -495,8 +496,12 @@ static void print_action(struct kmod_module *m, bool install,
 	path = kmod_module_get_path(m);
 
 	if (path == NULL) {
-		assert(kmod_module_get_initstate(m) == KMOD_MODULE_BUILTIN);
-		printf("builtin %s\n", kmod_module_get_name(m));
+		/*
+		 * Either a builtin module, or an alias, print only for
+		 * builtin
+		 */
+		if (kmod_module_get_initstate(m) == KMOD_MODULE_BUILTIN)
+			printf("builtin %s\n", kmod_module_get_name(m));
 	} else
 		printf("insmod %s %s\n", kmod_module_get_path(m), options);
 }

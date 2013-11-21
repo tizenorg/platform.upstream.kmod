@@ -1,7 +1,7 @@
 /*
  * libkmod - interface to kernel module operations
  *
- * Copyright (C) 2011-2012  ProFUSION embedded systems
+ * Copyright (C) 2011-2013  ProFUSION embedded systems
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -27,7 +27,7 @@
 #include <assert.h>
 #include <inttypes.h>
 
-#include "libkmod-private.h"
+#include "libkmod-internal.h"
 #include "libkmod-index.h"
 #include "macro.h"
 
@@ -432,9 +432,12 @@ void index_dump(struct index_file *in, int fd, const char *prefix)
 	struct index_node_f *root;
 	struct buffer buf;
 
+	root = index_readroot(in);
+	if (root == NULL)
+		return;
+
 	buf_init(&buf);
 	buf_pushchars(&buf, prefix);
-	root = index_readroot(in);
 	index_dump_node(root, &buf, fd);
 	buf_release(&buf);
 }
@@ -801,9 +804,9 @@ struct index_mm *index_mm_open(struct kmod_ctx *ctx, const char *filename,
 	if ((size_t) st.st_size < sizeof(hdr))
 		goto fail_nommap;
 
-	if ((idx->mm = mmap(0, st.st_size, PROT_READ, MAP_PRIVATE, fd, 0))
+	if ((idx->mm = mmap(NULL, st.st_size, PROT_READ, MAP_PRIVATE, fd, 0))
 							== MAP_FAILED) {
-		ERR(ctx, "mmap(0, %"PRIu64", PROT_READ, %d, MAP_PRIVATE, 0): %m\n",
+		ERR(ctx, "mmap(NULL, %"PRIu64", PROT_READ, %d, MAP_PRIVATE, 0): %m\n",
 							st.st_size, fd);
 		goto fail_nommap;
 	}
@@ -902,9 +905,12 @@ void index_mm_dump(struct index_mm *idx, int fd, const char *prefix)
 	struct index_mm_node *root;
 	struct buffer buf;
 
+	root = index_mm_readroot(idx);
+	if (root == NULL)
+		return;
+
 	buf_init(&buf);
 	buf_pushchars(&buf, prefix);
-	root = index_mm_readroot(idx);
 	index_mm_dump_node(root, &buf, fd);
 	buf_release(&buf);
 }

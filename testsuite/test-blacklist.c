@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2011-2012  ProFUSION embedded systems
+ * Copyright (C) 2011-2013  ProFUSION embedded systems
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -27,7 +27,7 @@
 
 /* good luck bulding a kmod_list outside of the library... makes this blacklist
  * function rather pointless */
-#include <libkmod-private.h>
+#include <libkmod-internal.h>
 
 /* FIXME: hack, change name so we don't clash */
 #undef ERR

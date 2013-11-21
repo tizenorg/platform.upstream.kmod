@@ -1,7 +1,7 @@
 /*
  * kmod-rmmod - remove modules from linux kernel using libkmod.
  *
- * Copyright (C) 2011-2012  ProFUSION embedded systems
+ * Copyright (C) 2011-2013  ProFUSION embedded systems
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -62,8 +62,14 @@ static void help(void)
 
 static int check_module_inuse(struct kmod_module *mod) {
 	struct kmod_list *holders;
+	int state;
 
-	if (kmod_module_get_initstate(mod) == -ENOENT) {
+	state = kmod_module_get_initstate(mod);
+
+	if (state == KMOD_MODULE_BUILTIN) {
+		ERR("Module %s is builtin.\n", kmod_module_get_name(mod));
+		return -ENOENT;
+	} else if (state < 0) {
 		ERR("Module %s is not currently loaded\n",
 				kmod_module_get_name(mod));
 		return -ENOENT;

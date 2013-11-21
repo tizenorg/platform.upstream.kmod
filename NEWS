@@ -1,3 +1,60 @@
+kmod 15
+=======
+
+- Bug fixes:
+	- kmod static-nodes doesn't fail if modules.devname isn't available
+	- Fix getting boolean parameter from kernel cmdline in case the value
+	  is omitted
+	- Fix some mkdir_p() corner cases (used in testsuite and static-nodes)
+
+- New features:
+	- kmod static-nodes creates parent directories if given a -o option
+	- kmod binary statically links to libkmod - if distro is only interested
+	  in the kmod tool (for example in an initrd) it can refrain from
+	  installing the library
+	- Add shell completion for kmod tool
+
+kmod 14
+=======
+
+- Bug fixes:
+	- Fix some format strings
+	- Protect against NULL being passed around to index
+	- Avoid calling syscall() with -1 when finit_module() is not available,
+	  since this doesn't always work
+	- Fix not being able to remove alias due to checking the module's
+	  refcount
+	- Minor fixes and refactors
+
+- New features:
+	- Improve libkmod documentation, particularly on how flags are dealt
+	  with.
+	- Remove ability to build a static libkmod
+	- Add static-nodes command to kmod that parses modules.devname
+	  generating output in useful formats
+
+kmod 13
+=======
+
+- Bug fixes:
+	- Add the long option --symbol-prefix option to depmod (it was absent)
+	  and fix its behavior
+	- Don't abort if there's a bogus line in configuration file like "alias
+	  psmouse off". Some distros are carrying this since the days of
+	  modutils
+
+- New features:
+	- Add support for finit_module(2). If the module is load straight from
+	  the disk and without compression we use finit_module() syscall when
+	  available, falling back to init_module() otherwise
+	- kmod_module_get_info() also returns the signature if the module is
+	  signed and modinfo uses it
+	- Use secure_getenv if available
+	- rmmod understands builtin modules, just like modprobe does
+	- Improve compatibility with musl-libc
+	- Test cases exit with success when receiving a signal if they are
+	  xfail tests
+
 kmod 12
 =======
 

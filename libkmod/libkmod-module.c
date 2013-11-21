@@ -1,7 +1,7 @@
 /*
  * libkmod - interface to kernel module operations
  *
- * Copyright (C) 2011-2012  ProFUSION embedded systems
+ * Copyright (C) 2011-2013  ProFUSION embedded systems
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -33,12 +33,17 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/mman.h>
+#include <sys/syscall.h>
 #include <sys/wait.h>
 #include <string.h>
 #include <fnmatch.h>
 
+#ifdef HAVE_LINUX_MODULE_H
+#include <linux/module.h>
+#endif
+
 #include "libkmod.h"
-#include "libkmod-private.h"
+#include "libkmod-internal.h"
 
 /**
  * SECTION:libkmod-module
@@ -565,8 +570,7 @@ fail:
  * Drop a reference of each kmod module in @list and releases the resources
  * taken by the list itself.
  *
- * Returns: NULL if @mod is NULL or if the module was released. Otherwise it
- * returns the passed @mod with its refcount decremented.
+ * Returns: 0
  */
 KMOD_EXPORT int kmod_module_unref_list(struct kmod_list *list)
 {
@@ -624,9 +628,8 @@ static const struct kmod_list *module_get_dependencies_noref(const struct kmod_m
  * The result is cached in @mod, so subsequent calls to this function will
  * return the already searched list of modules.
  *
- * Returns: NULL on failure or if there are any dependencies. Otherwise it
- * returns a list of kmod modules that can be released by calling
- * kmod_module_unref_list().
+ * Returns: NULL on failure. Otherwise it returns a list of kmod modules
+ * that can be released by calling kmod_module_unref_list().
  */
 KMOD_EXPORT struct kmod_list *kmod_module_get_dependencies(const struct kmod_module *mod)
 {
@@ -735,7 +738,15 @@ extern long delete_module(const char *name, unsigned int flags);
 /**
  * kmod_module_remove_module:
  * @mod: kmod module
- * @flags: flags to pass to Linux kernel when removing the module
+ * @flags: flags to pass to Linux kernel when removing the module, valid flags are
+ * KMOD_REMOVE_FORCE: force remove module regardless if it's still in
+ * use by a kernel subsystem or other process;
+ * KMOD_REMOVE_NOWAIT: return immediately. It will fail if the module
+ * is in using and KMOD_REMOVE_FORCE is not specified.
+ * If this module is in use by any kernel subsystem or process, not using
+ * this flag will cause the call to block indefinitely, until the module
+ * is not in use anymore. Always use this flag, it's deprecated not using
+ * it and the default behavior might change in future to always set it.
  *
  * Remove a module from Linux kernel.
  *
@@ -767,7 +778,9 @@ extern long init_module(const void *mem, unsigned long len, const char *args);
  * kmod_module_insert_module:
  * @mod: kmod module
  * @flags: flags are not passed to Linux Kernel, but instead they dictate the
- * behavior of this function.
+ * behavior of this function, valid flags are
+ * KMOD_INSERT_FORCE_VERMAGIC: ignore kernel version magic;
+ * KMOD_INSERT_FORCE_MODVERSION: ignore symbol version hashes.
  * @options: module's options to pass to Linux Kernel.
  *
  * Insert a module in Linux kernel. It opens the file pointed by @mod,
@@ -803,6 +816,19 @@ KMOD_EXPORT int kmod_module_insert_module(struct kmod_module *mod,
 		return err;
 	}
 
+	if (kmod_file_get_direct(file)) {
+		unsigned int kernel_flags = 0;
+
+		if (flags & KMOD_INSERT_FORCE_VERMAGIC)
+			kernel_flags |= MODULE_INIT_IGNORE_VERMAGIC;
+		if (flags & KMOD_INSERT_FORCE_MODVERSION)
+			kernel_flags |= MODULE_INIT_IGNORE_MODVERSIONS;
+
+		err = finit_module(kmod_file_get_fd(file), args, kernel_flags);
+		if (err == 0 || errno != ENOSYS)
+			goto init_finished;
+	}
+
 	size = kmod_file_get_size(file);
 	mem = kmod_file_get_contents(file);
 
@@ -829,6 +855,7 @@ KMOD_EXPORT int kmod_module_insert_module(struct kmod_module *mod,
 	}
 
 	err = init_module(mem, size, args);
+init_finished:
 	if (err < 0) {
 		err = -errno;
 		INFO(mod->ctx, "Failed to insert module '%s': %m\n", path);
@@ -862,7 +889,9 @@ static bool module_is_blacklisted(struct kmod_module *mod)
 /**
  * kmod_module_apply_filter
  * @ctx: kmod library context
- * @filter_type: bitmask to filter modules on
+ * @filter_type: bitmask to filter modules out, valid types are
+ * KMOD_FILTER_BLACKLIST: filter modules in blacklist out;
+ * KMOD_FILTER_BUILTIN: filter builtin modules out.
  * @input: list of kmod_module to be filtered
  * @output: where to save the new list
  *
@@ -1133,7 +1162,25 @@ static int kmod_module_get_probe_list(struct kmod_module *mod,
  * kmod_module_probe_insert_module:
  * @mod: kmod module
  * @flags: flags are not passed to Linux Kernel, but instead they dictate the
- * behavior of this function.
+ * behavior of this function, valid flags are
+ * KMOD_PROBE_FORCE_VERMAGIC: ignore kernel version magic;
+ * KMOD_PROBE_FORCE_MODVERSION: ignore symbol version hashes;
+ * KMOD_PROBE_IGNORE_COMMAND: whether the probe should ignore install
+ * commands and softdeps configured in the system;
+ * KMOD_PROBE_IGNORE_LOADED: do not check whether the module is already
+ * live in kernel or not;
+ * KMOD_PROBE_DRY_RUN: dry run, do not insert module, just call the
+ * associated callback function;
+ * KMOD_PROBE_FAIL_ON_LOADED: if KMOD_PROBE_IGNORE_LOADED is not specified
+ * and the module is already live in kernel, the function will fail if this
+ * flag is specified;
+ * KMOD_PROBE_APPLY_BLACKLIST_ALL: probe will apply KMOD_FILTER_BLACKLIST
+ * filter to this module and its dependencies. If any of the dependencies (or
+ * the module) is blacklisted, the probe will fail, unless the blacklisted
+ * module is already live in kernel;
+ * KMOD_PROBE_APPLY_BLACKLIST: probe will fail if the module is blacklisted;
+ * KMOD_PROBE_APPLY_BLACKLIST_ALIAS_ONLY: probe will fail if the module is an
+ * alias and is blacklisted.
  * @extra_options: module's options to pass to Linux Kernel. It applies only
  * to @mod, not to its dependencies.
  * @run_install: function to run when @mod is backed by an install command.
@@ -1545,7 +1592,7 @@ void kmod_module_set_remove_commands(struct kmod_module *mod, const char *cmd)
  * Create a new list of kmod modules with all modules currently loaded in
  * kernel. It uses /proc/modules to get the names of loaded modules and to
  * create kmod modules by calling kmod_module_new_from_name() in each of them.
- * They are put are put in @list in no particular order.
+ * They are put in @list in no particular order.
  *
  * The initial refcount is 1, and needs to be decremented to release the
  * resources of the kmod_module. The returned @list must be released by
@@ -1633,7 +1680,11 @@ KMOD_EXPORT const char *kmod_module_initstate_str(enum kmod_module_initstate sta
  * Get the initstate of this @mod, as returned by Linux Kernel, by reading
  * /sys filesystem.
  *
- * Returns: < 0 on error or enum kmod_initstate if module is found in kernel.
+ * Returns: < 0 on error or module state if module is found in kernel, valid states are
+ * KMOD_MODULE_BUILTIN: module is builtin;
+ * KMOD_MODULE_LIVE: module is live in kernel;
+ * KMOD_MODULE_COMING: module is being loaded;
+ * KMOD_MODULE_GOING: module is being unloaded.
  */
 KMOD_EXPORT int kmod_module_get_initstate(const struct kmod_module *mod)
 {
@@ -1820,7 +1871,7 @@ KMOD_EXPORT struct kmod_list *kmod_module_get_holders(const struct kmod_module *
 	struct kmod_list *list = NULL;
 	DIR *d;
 
-	if (mod == NULL)
+	if (mod == NULL || mod->ctx == NULL)
 		return NULL;
 
 	snprintf(dname, sizeof(dname), "/sys/module/%s/holders", mod->name);
@@ -2081,7 +2132,7 @@ static struct kmod_module_info *kmod_module_info_new(const char *key, size_t key
 		return NULL;
 
 	info->key = (char *)info + sizeof(struct kmod_module_info)
-		+ valuelen + 1;
+		    + valuelen + 1;
 	memcpy(info->key, key, keylen);
 	info->key[keylen] = '\0';
 	memcpy(info->value, value, valuelen);
@@ -2094,6 +2145,22 @@ static void kmod_module_info_free(struct kmod_module_info *info)
 	free(info);
 }
 
+static struct kmod_list *kmod_module_info_append(struct kmod_list **list, const char *key, size_t keylen, const char *value, size_t valuelen)
+{
+	struct kmod_module_info *info;
+	struct kmod_list *n;
+
+	info = kmod_module_info_new(key, keylen, value, valuelen);
+	if (info == NULL)
+		return NULL;
+	n = kmod_list_append(*list, info);
+	if (n != NULL)
+		*list = n;
+	else
+		kmod_module_info_free(info);
+	return n;
+}
+
 /**
  * kmod_module_get_info:
  * @mod: kmod module
@@ -2104,7 +2171,9 @@ static void kmod_module_info_free(struct kmod_module_info *info)
  *
  * Get a list of entries in ELF section ".modinfo", these contain
  * alias, license, depends, vermagic and other keys with respective
- * values.
+ * values. If the module is signed (CONFIG_MODULE_SIG), information
+ * about the module signature is included as well: signer,
+ * sig_key and sig_hashalgo.
  *
  * After use, free the @list by calling kmod_module_info_free_list().
  *
@@ -2114,7 +2183,8 @@ KMOD_EXPORT int kmod_module_get_info(const struct kmod_module *mod, struct kmod_
 {
 	struct kmod_elf *elf;
 	char **strings;
-	int i, count, ret = 0;
+	int i, count, ret = -ENOMEM;
+	struct kmod_signature_info sig_info;
 
 	if (mod == NULL || list == NULL)
 		return -ENOENT;
@@ -2130,7 +2200,6 @@ KMOD_EXPORT int kmod_module_get_info(const struct kmod_module *mod, struct kmod_
 		return count;
 
 	for (i = 0; i < count; i++) {
-		struct kmod_module_info *info;
 		struct kmod_list *n;
 		const char *key, *value;
 		size_t keylen, valuelen;
@@ -2140,34 +2209,64 @@ KMOD_EXPORT int kmod_module_get_info(const struct kmod_module *mod, struct kmod_
 		if (value == NULL) {
 			keylen = strlen(key);
 			valuelen = 0;
+			value = key;
 		} else {
 			keylen = value - key;
 			value++;
 			valuelen = strlen(value);
 		}
 
-		info = kmod_module_info_new(key, keylen, value, valuelen);
-		if (info == NULL) {
-			ret = -errno;
-			kmod_module_info_free_list(*list);
-			*list = NULL;
+		n = kmod_module_info_append(list, key, keylen, value, valuelen);
+		if (n == NULL)
 			goto list_error;
-		}
+	}
 
-		n = kmod_list_append(*list, info);
-		if (n != NULL)
-			*list = n;
-		else {
-			kmod_module_info_free(info);
-			kmod_module_info_free_list(*list);
-			*list = NULL;
-			ret = -ENOMEM;
+	if (kmod_module_signature_info(mod->file, &sig_info)) {
+		struct kmod_list *n;
+		char *key_hex;
+
+		n = kmod_module_info_append(list, "signer", strlen("signer"),
+				sig_info.signer, sig_info.signer_len);
+		if (n == NULL)
 			goto list_error;
+		count++;
+
+		/* Display the key id as 01:12:DE:AD:BE:EF:... */
+		key_hex = malloc(sig_info.key_id_len * 3);
+		if (key_hex == NULL)
+			goto list_error;
+		for (i = 0; i < (int)sig_info.key_id_len; i++) {
+			sprintf(key_hex + i * 3, "%02X",
+					(unsigned char)sig_info.key_id[i]);
+			if (i < (int)sig_info.key_id_len - 1)
+				key_hex[i * 3 + 2] = ':';
 		}
+		n = kmod_module_info_append(list, "sig_key", strlen("sig_key"),
+				key_hex, sig_info.key_id_len * 3 - 1);
+		free(key_hex);
+		if (n == NULL)
+			goto list_error;
+		count++;
+
+		n = kmod_module_info_append(list,
+				"sig_hashalgo", strlen("sig_hashalgo"),
+				sig_info.hash_algo, strlen(sig_info.hash_algo));
+		if (n == NULL)
+			goto list_error;
+		count++;
+
+		/*
+		 * Omit sig_info.id_type and sig_info.algo for now, as these
+		 * are currently constant.
+		 */
 	}
 	ret = count;
 
 list_error:
+	if (ret < 0) {
+		kmod_module_info_free_list(*list);
+		*list = NULL;
+	}
 	free(strings);
 	return ret;
 }
@@ -2314,7 +2413,7 @@ list_error:
 }
 
 /**
- * kmod_module_versions_get_symbol:
+ * kmod_module_version_get_symbol:
  * @entry: a list entry representing a kmod module versions
  *
  * Get the symbol of a kmod module versions.

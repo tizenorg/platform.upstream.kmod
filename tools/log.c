@@ -1,7 +1,7 @@
 /*
  * kmod - log infrastructure
  *
- * Copyright (C) 2012  ProFUSION embedded systems
+ * Copyright (C) 2012-2013  ProFUSION embedded systems
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -60,6 +60,7 @@ static _always_inline_ const char *prio_to_str(int prio)
 	return prioname;
 }
 
+_printf_format_(6, 0)
 static void log_kmod(void *data, int priority, const char *file, int line,
 		     const char *fn, const char *format, va_list args)
 {

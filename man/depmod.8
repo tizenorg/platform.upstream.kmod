@@ -1,13 +1,13 @@
 '\" t
 .\"     Title: depmod
 .\"    Author: Jon Masters <jcm@jonmasters.org>
-.\" Generator: DocBook XSL Stylesheets v1.77.1 <http://docbook.sf.net/>
-.\"      Date: 12/05/2012
+.\" Generator: DocBook XSL Stylesheets v1.78.1 <http://docbook.sf.net/>
+.\"      Date: 08/22/2013
 .\"    Manual: depmod
 .\"    Source: kmod
 .\"  Language: English
 .\"
-.TH "DEPMOD" "8" "12/05/2012" "kmod" "depmod"
+.TH "DEPMOD" "8" "08/22/2013" "kmod" "depmod"
 .\" -----------------------------------------------------------------
 .\" * Define some portability stuff
 .\" -----------------------------------------------------------------
@@ -38,7 +38,6 @@ depmod \- Generate modules\&.dep and map files\&.
 .PP
 Linux kernel modules can provide services (called "symbols") for other modules to use (using one of the EXPORT_SYMBOL variants in the code)\&. If a second module uses this symbol, that second module clearly depends on the first module\&. These dependencies can get quite complex\&.
 .PP
-
 \fBdepmod\fR
 creates a list of module dependencies by reading each module under
 /lib/modules/\fIversion\fR
@@ -153,7 +152,6 @@ Warn on duplicate dependencies, aliases, symbol versions, etc\&.
 This manual page originally Copyright 2002, Rusty Russell, IBM Corporation\&. Portions Copyright Jon Masters, and others\&.
 .SH "SEE ALSO"
 .PP
-
 \fBdepmod.d\fR(5),
 \fBmodprobe\fR(8),
 \fBmodules.dep\fR(5)

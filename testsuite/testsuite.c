@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2012  ProFUSION embedded systems
+ * Copyright (C) 2012-2013  ProFUSION embedded systems
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -440,7 +440,7 @@ static inline int safe_read(int fd, void *buf, size_t count)
 
 	while (1) {
 		r = read(fd, buf, count);
-		if (r == -1 && errno == -EINTR)
+		if (r == -1 && errno == EINTR)
 			continue;
 		break;
 	}
@@ -573,7 +573,7 @@ static inline int test_run_parent(const struct test *t, int fdout[2],
 	} else if (WIFSIGNALED(err)) {
 		ERR("'%s' [%u] terminated by signal %d (%s)\n", t->name, pid,
 				WTERMSIG(err), strsignal(WTERMSIG(err)));
-		return EXIT_FAILURE;
+		return t->expected_fail ? EXIT_SUCCESS : EXIT_FAILURE;
 	}
 
 	if (matchout)

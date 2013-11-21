@@ -5,6 +5,7 @@
 #include <syslog.h>
 #include <limits.h>
 
+#include "missing.h"
 #include "macro.h"
 #include "libkmod.h"
 
@@ -34,6 +35,15 @@ static _always_inline_ _printf_format_(2, 3) void
 #define KMOD_EXPORT __attribute__ ((visibility("default")))
 
 #define KCMD_LINE_SIZE 4096
+
+#ifndef HAVE_SECURE_GETENV
+#  ifdef HAVE___SECURE_GETENV
+#    define secure_getenv __secure_getenv
+#  else
+#    warning neither secure_getenv nor __secure_getenv is available
+#    define secure_getenv getenv
+#  endif
+#endif
 
 void kmod_log(const struct kmod_ctx *ctx,
 		int priority, const char *file, int line, const char *fn,
@@ -87,8 +97,8 @@ void kmod_set_modules_visited(struct kmod_ctx *ctx, bool visited) __attribute__(
 char *kmod_search_moddep(struct kmod_ctx *ctx, const char *name) __attribute__((nonnull(1,2)));
 
 struct kmod_module *kmod_pool_get_module(struct kmod_ctx *ctx, const char *key) __attribute__((nonnull(1,2)));
-void kmod_pool_add_module(struct kmod_ctx *ctx, struct kmod_module *mod, const char *key) __attribute__((nonnull(1,2, 3)));
-void kmod_pool_del_module(struct kmod_ctx *ctx, struct kmod_module *mod, const char *key) __attribute__((nonnull(1,2, 3)));
+void kmod_pool_add_module(struct kmod_ctx *ctx, struct kmod_module *mod, const char *key) __attribute__((nonnull(1, 2, 3)));
+void kmod_pool_del_module(struct kmod_ctx *ctx, struct kmod_module *mod, const char *key) __attribute__((nonnull(1, 2, 3)));
 
 const struct kmod_config *kmod_get_config(const struct kmod_ctx *ctx) __attribute__((nonnull(1)));
 
@@ -142,6 +152,8 @@ struct kmod_file *kmod_file_open(const struct kmod_ctx *ctx, const char *filenam
 struct kmod_elf *kmod_file_get_elf(struct kmod_file *file) __attribute__((nonnull(1)));
 void *kmod_file_get_contents(const struct kmod_file *file) _must_check_ __attribute__((nonnull(1)));
 off_t kmod_file_get_size(const struct kmod_file *file) _must_check_ __attribute__((nonnull(1)));
+bool kmod_file_get_direct(const struct kmod_file *file) _must_check_ __attribute__((nonnull(1)));
+int kmod_file_get_fd(const struct kmod_file *file) _must_check_ __attribute__((nonnull(1)));
 void kmod_file_unref(struct kmod_file *file) __attribute__((nonnull(1)));
 
 /* libkmod-elf.c */
@@ -168,5 +180,14 @@ int kmod_elf_strip_vermagic(struct kmod_elf *elf) _must_check_ __attribute__((no
  */
 int kmod_elf_get_section(const struct kmod_elf *elf, const char *section, const void **buf, uint64_t *buf_size) _must_check_ __attribute__((nonnull(1,2,3,4)));
 
+/* libkmod-signature.c */
+struct kmod_signature_info {
+	const char *signer;
+	size_t signer_len;
+	const char *key_id;
+	size_t key_id_len;
+	const char *algo, *hash_algo, *id_type;
+};
+bool kmod_module_signature_info(const struct kmod_file *file, struct kmod_signature_info *sig_info) _must_check_ __attribute__((nonnull(1, 2)));
 /* util functions */
 #include "libkmod-util.h"

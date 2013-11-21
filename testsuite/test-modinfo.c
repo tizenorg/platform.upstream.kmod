@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2012  ProFUSION embedded systems
+ * Copyright (C) 2012-2013  ProFUSION embedded systems
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -32,7 +32,8 @@ static __noreturn int modinfo_jonsmodules(const struct test *t)
 	const char *const args[] = {
 		progname,
 		"/ext4-i686.ko", "/ext4-ppc64.ko", "/ext4-s390x.ko",
-		"/ext4-x86_64.ko",
+		"/ext4-x86_64.ko", "/ext4-x86_64-sha1.ko",
+		"/ext4-x86_64-sha256.ko",
 		NULL,
 	};
 

@@ -1,13 +1,13 @@
 '\" t
 .\"     Title: modprobe
 .\"    Author: Jon Masters <jcm@jonmasters.org>
-.\" Generator: DocBook XSL Stylesheets v1.77.1 <http://docbook.sf.net/>
-.\"      Date: 12/05/2012
+.\" Generator: DocBook XSL Stylesheets v1.78.1 <http://docbook.sf.net/>
+.\"      Date: 08/22/2013
 .\"    Manual: modprobe
 .\"    Source: kmod
 .\"  Language: English
 .\"
-.TH "MODPROBE" "8" "12/05/2012" "kmod" "modprobe"
+.TH "MODPROBE" "8" "08/22/2013" "kmod" "modprobe"
 .\" -----------------------------------------------------------------
 .\" * Define some portability stuff
 .\" -----------------------------------------------------------------
@@ -40,7 +40,6 @@ modprobe \- Add and remove modules from the Linux Kernel
 \fBmodprobe\fR [\-\-dump\-modversions] [\fIfilename\fR]
 .SH "DESCRIPTION"
 .PP
-
 \fBmodprobe\fR
 intelligently adds or removes a module from the Linux kernel: note that for convenience, there is no difference between _ and \- in module names (automatic underscore conversion is performed)\&.
 \fBmodprobe\fR
@@ -58,7 +57,6 @@ Note that unlike in 2\&.4 series Linux kernels (which are not supported by this 
 does not do anything to the module itself: the work of resolving symbols and understanding parameters is done inside the kernel\&. So module failure is sometimes accompanied by a kernel message: see
 \fBdmesg\fR(8)\&.
 .PP
-
 \fBmodprobe\fR
 expects an up\-to\-date
 modules\&.dep\&.bin
@@ -266,7 +264,6 @@ The MODPROBE_OPTIONS environment variable can also be used to pass arguments to
 This manual page originally Copyright 2002, Rusty Russell, IBM Corporation\&. Maintained by Jon Masters and others\&.
 .SH "SEE ALSO"
 .PP
-
 \fBmodprobe.d\fR(5),
 \fBinsmod\fR(8),
 \fBrmmod\fR(8),

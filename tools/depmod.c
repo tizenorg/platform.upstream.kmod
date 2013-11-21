@@ -1,7 +1,7 @@
 /*
  * kmod-depmod - calculate modules.dep  using libkmod.
  *
- * Copyright (C) 2011-2012  ProFUSION embedded systems
+ * Copyright (C) 2011-2013  ProFUSION embedded systems
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -63,7 +63,7 @@ static const struct option cmdopts[] = {
 	{ "verbose", no_argument, 0, 'v' },
 	{ "show", no_argument, 0, 'n' },
 	{ "dry-run", no_argument, 0, 'n' },
-	{ "symbol-prefix", no_argument, 0, 'P' },
+	{ "symbol-prefix", required_argument, 0, 'P' },
 	{ "warn", no_argument, 0, 'w' },
 	{ "map", no_argument, 0, 'm' }, /* deprecated */
 	{ "version", no_argument, 0, 'V' },
@@ -101,6 +101,7 @@ static void help(void)
 		program_invocation_short_name);
 }
 
+_printf_format_(1, 2)
 static inline void _show(const char *fmt, ...)
 {
 	va_list args;
@@ -847,7 +848,7 @@ static int cfg_files_list(struct cfg_file ***p_files, size_t *p_n_files,
 	if (S_ISREG(st.st_mode)) {
 		cfg_files_insert_sorted(p_files, p_n_files, path, NULL);
 		return 0;
-	} if (!S_ISDIR(st.st_mode)) {
+	} else if (!S_ISDIR(st.st_mode)) {
 		ERR("unsupported file mode %s: %#x\n", path, st.st_mode);
 		return -EINVAL;
 	}
@@ -1256,7 +1257,7 @@ static int depmod_modules_search_dir(struct depmod *depmod, DIR *d, size_t basel
 		namelen = strlen(name);
 		if (baselen + namelen + 2 >= PATH_MAX) {
 			path[baselen] = '\0';
-			ERR("path is too long %s%s %zd\n", path, name);
+			ERR("path is too long %s%s\n", path, name);
 			continue;
 		}
 		memcpy(path + baselen, name, namelen + 1);
@@ -1428,13 +1429,14 @@ corrupted:
 }
 
 static int depmod_symbol_add(struct depmod *depmod, const char *name,
-					uint64_t crc, const struct mod *owner)
+					bool prefix_skipped, uint64_t crc,
+					const struct mod *owner)
 {
 	size_t namelen;
 	int err;
 	struct symbol *sym;
 
-	if (name[0] == depmod->cfg->sym_prefix)
+	if (!prefix_skipped && (name[0] == depmod->cfg->sym_prefix))
 		name++;
 
 	namelen = strlen(name) + 1;
@@ -1491,7 +1493,7 @@ static int depmod_load_modules(struct depmod *depmod)
 		kmod_list_foreach(l, list) {
 			const char *name = kmod_module_symbol_get_symbol(l);
 			uint64_t crc = kmod_module_symbol_get_crc(l);
-			depmod_symbol_add(depmod, name, crc, mod);
+			depmod_symbol_add(depmod, name, false, crc, mod);
 		}
 		kmod_module_symbols_free_list(list);
 
@@ -1503,7 +1505,7 @@ load_info:
 		mod->kmod = NULL;
 	}
 
-	DBG("loaded symbols (%zd modules, %zd symbols)\n",
+	DBG("loaded symbols (%zd modules, %u symbols)\n",
 	    depmod->modules.count, hash_get_count(depmod->symbols));
 
 	return 0;
@@ -1549,7 +1551,7 @@ static int depmod_load_dependencies(struct depmod *depmod)
 {
 	struct mod **itr, **itr_end;
 
-	DBG("load dependencies (%zd modules, %zd symbols)\n",
+	DBG("load dependencies (%zd modules, %u symbols)\n",
 	    depmod->modules.count, hash_get_count(depmod->symbols));
 
 	itr = (struct mod **)depmod->modules.array;
@@ -1565,7 +1567,7 @@ static int depmod_load_dependencies(struct depmod *depmod)
 		depmod_load_module_dependencies(depmod, mod);
 	}
 
-	DBG("loaded dependencies (%zd modules, %zd symbols)\n",
+	DBG("loaded dependencies (%zd modules, %u symbols)\n",
 	    depmod->modules.count, hash_get_count(depmod->symbols));
 
 	return 0;
@@ -1608,7 +1610,7 @@ static int depmod_calculate_dependencies(struct depmod *depmod)
 	roots = users + n_mods;
 	sorted = roots + n_mods;
 
-	DBG("calculate dependencies and ordering (%zd modules)\n", n_mods);
+	DBG("calculate dependencies and ordering (%hu modules)\n", n_mods);
 
 	assert(depmod->modules.count < UINT16_MAX);
 
@@ -1649,7 +1651,7 @@ static int depmod_calculate_dependencies(struct depmod *depmod)
 	}
 
 	if (n_sorted < n_mods) {
-		WRN("found %hu modules in dependency cycles!\n",
+		WRN("found %u modules in dependency cycles!\n",
 		    n_mods - n_sorted);
 		for (i = 0; i < n_mods; i++) {
 			struct mod *m;
@@ -1665,7 +1667,7 @@ static int depmod_calculate_dependencies(struct depmod *depmod)
 
 	depmod_sort_dependencies(depmod);
 
-	DBG("calculated dependencies and ordering (%u loops, %zd modules)\n",
+	DBG("calculated dependencies and ordering (%u loops, %hu modules)\n",
 	    depmod->dep_loops, n_mods);
 
 	free(users);
@@ -2226,9 +2228,9 @@ static int depmod_output(struct depmod *depmod, FILE *out)
 static void depmod_add_fake_syms(struct depmod *depmod)
 {
 	/* __this_module is magic inserted by kernel loader. */
-	depmod_symbol_add(depmod, "__this_module", 0, NULL);
+	depmod_symbol_add(depmod, "__this_module", true, 0, NULL);
 	/* On S390, this is faked up too */
-	depmod_symbol_add(depmod, "_GLOBAL_OFFSET_TABLE_", 0, NULL);
+	depmod_symbol_add(depmod, "_GLOBAL_OFFSET_TABLE_", true, 0, NULL);
 }
 
 static int depmod_load_symvers(struct depmod *depmod, const char *filename)
@@ -2269,7 +2271,7 @@ static int depmod_load_symvers(struct depmod *depmod, const char *filename)
 			continue;
 		}
 
-		depmod_symbol_add(depmod, sym, crc, NULL);
+		depmod_symbol_add(depmod, sym, false, crc, NULL);
 	}
 	depmod_add_fake_syms(depmod);
 
@@ -2310,6 +2312,10 @@ static int depmod_load_system_map(struct depmod *depmod, const char *filename)
 			goto invalid_syntax;
 		p++;
 
+		/* skip prefix */
+		if (p[0] == depmod->cfg->sym_prefix)
+			p++;
+
 		/* Covers gpl-only and normal symbols. */
 		if (strncmp(p, ksymstr, ksymstr_len) != 0)
 			continue;
@@ -2318,7 +2324,7 @@ static int depmod_load_system_map(struct depmod *depmod, const char *filename)
 		if (end != NULL)
 			*end = '\0';
 
-		depmod_symbol_add(depmod, p + ksymstr_len, 0, NULL);
+		depmod_symbol_add(depmod, p + ksymstr_len, true, 0, NULL);
 		continue;
 
 	invalid_syntax:
@@ -2351,7 +2357,7 @@ static int depfile_up_to_date_dir(DIR *d, time_t mtime, size_t baselen, char *pa
 		namelen = strlen(name);
 		if (baselen + namelen + 2 >= PATH_MAX) {
 			path[baselen] = '\0';
-			ERR("path is too long %s%s %zd\n", path, name);
+			ERR("path is too long %s%s\n", path, name);
 			continue;
 		}
 
