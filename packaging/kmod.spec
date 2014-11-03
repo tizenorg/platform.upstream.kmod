@@ -1,12 +1,13 @@
 Name:           kmod
-Version:        15
+Version:        18
 Release:        0
 License:        LGPL-2.1+ and GPL-2.0+
 Summary:        Utilities to load modules into the kernel
 Url:            http://www.politreco.com/2011/12/announce-kmod-2/
 Group:          Base/Libraries
 Source:         %{name}-%{version}.tar.xz
-Source1001: 	kmod.manifest
+#X-Vcs-Url:     git://git.kernel.org/pub/scm/utils/kernel/kmod/kmod.git
+Source1001:     kmod.manifest
 BuildRequires:  autoconf
 BuildRequires:  automake
 BuildRequires:  libtool
@@ -29,7 +30,7 @@ License:        GPL-2.0+
 Summary:        Compat symlinks for kernel module utilities
 Group:          Base/Libraries
 Requires:       kmod
-Requires(pre):	filesystem
+Requires(pre):  filesystem
 Provides:       module-init-tools
 
 %description compat
@@ -66,7 +67,7 @@ in libkmod.
 cp %{SOURCE1001} .
 
 %build
-autoreconf -fi
+%autogen
 # The extra --includedir gives us the possibility to detect dependent
 # packages which fail to properly use pkgconfig.
 %configure \
@@ -76,19 +77,19 @@ autoreconf -fi
    --includedir=%{_includedir}/%{name}-%{version} \
    --with-rootlibdir=%{_libdir} \
    --bindir=%{_bindir}
-make %{?_smp_mflags}
+%__make %{?_smp_mflags}
 
 %check
-make check
+%__make check
 
 %install
 %make_install
 
 # kmod-compat
 mkdir -p %{buildroot}/%{_sbindir}
-ln -s %{_bindir}/kmod %{buildroot}/%{_bindir}/lsmod
+ln -sf %{_bindir}/kmod %{buildroot}/%{_bindir}/lsmod
 for i in depmod insmod lsmod modinfo modprobe rmmod; do
-	ln -s %{_bindir}/kmod %{buildroot}/%{_sbindir}/$i
+    ln -sf %{_bindir}/kmod %{buildroot}/%{_sbindir}/$i
 done;
 
 
@@ -128,5 +129,3 @@ done;
 %{_sbindir}/modinfo
 %{_sbindir}/modprobe
 %{_sbindir}/rmmod
-
-%changelog
