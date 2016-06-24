@@ -77,7 +77,7 @@ cp %{SOURCE1001} .
    --includedir=%{_includedir}/%{name}-%{version} \
    --with-rootlibdir=%{_libdir} \
    --bindir=%{_bindir}
-%__make %{?_smp_mflags}
+%__make %{?_smp_mflags} CFLAGS+="-fPIE" LDFLAGS+="-pie"
 
 %check
 %__make check
